@@ -5,10 +5,14 @@ type ProgressBarProps = {
   value: number;
   label: string;
   tone?: "accent" | "ok" | "warn";
+  /** sm = 6px track for dense cards; md = 8px for hero stats. */
+  size?: "sm" | "md";
   className?: string;
 };
 
-export function ProgressBar({ value, label, tone = "accent", className = "" }: ProgressBarProps) {
+const SIZES = { sm: "h-1.5", md: "h-2" } as const;
+
+export function ProgressBar({ value, label, tone = "accent", size = "md", className = "" }: ProgressBarProps) {
   const pct = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
 
   return (
@@ -18,7 +22,7 @@ export function ProgressBar({ value, label, tone = "accent", className = "" }: P
       aria-valuemax={100}
       aria-valuenow={Math.round(pct)}
       aria-label={label}
-      className={`h-2 w-full overflow-hidden rounded-full bg-surface-3 ${className}`}
+      className={`w-full overflow-hidden rounded-full bg-surface-3 ${SIZES[size]} ${className}`}
     >
       <div
         className={
