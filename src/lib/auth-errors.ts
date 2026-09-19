@@ -17,6 +17,12 @@ export function friendlyAuthError(e: unknown): string {
     if (msg.includes("password should be at least") || msg.includes("password must be")) {
       return "Password is too short — use at least 8 characters.";
     }
+    if (
+      msg.includes("email_address_invalid") ||
+      (msg.includes("email") && msg.includes("invalid"))
+    ) {
+      return "That email was rejected — check for typos. Placeholder inboxes like example.com are blocked; use an address you can access.";
+    }
     if (msg.includes("unable to validate email") || msg.includes("invalid email")) {
       return "That email address doesn't look right. Check for typos.";
     }
