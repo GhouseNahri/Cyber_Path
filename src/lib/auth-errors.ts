@@ -26,6 +26,13 @@ export function friendlyAuthError(e: unknown): string {
     if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
       return "Can't reach the server. Check your connection and try again.";
     }
+    if (
+      msg.includes("failed to parse url") ||
+      msg.includes("supabaseurl is required") ||
+      msg.includes("supabase key is required")
+    ) {
+      return "The app isn't connected to its backend yet. (Developer: set the Supabase env vars and restart the dev server.)";
+    }
     if (msg.includes("session expired")) {
       return e.message;
     }
