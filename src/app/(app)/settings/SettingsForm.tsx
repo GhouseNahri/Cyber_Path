@@ -78,7 +78,10 @@ export function SettingsForm({ profile, email }: { profile: Profile; email: stri
       if (error) throw error;
 
       // Keep auth metadata (used by the user chip) in sync with the profile.
-      await supabase.auth.updateUser({ data: { display_name: displayName.trim() } });
+      // Username is synced too so the auth->profile trigger stays consistent.
+      await supabase.auth.updateUser({
+        data: { display_name: displayName.trim(), username: username.trim().toLowerCase() },
+      });
 
       setStatus("saved");
       router.refresh();
