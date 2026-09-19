@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { Card, CardHeader, Badge, StatCard, ProgressRing, EmptyState, buttonClasses } from "@/components/ui";
 import { timeGreeting, formatToday } from "@/lib/greeting";
+import { getProfile } from "@/lib/profile";
 
-export default function DashboardPage() {
-  // Phase 1: no profile in the database yet (Phase 2/3) — greeting stays
-  // generic and all metrics are honest zeros. Nothing here is simulated.
-  const name: string | null = null;
-  const greeting = timeGreeting();
-  const today = formatToday();
+export default async function DashboardPage() {
+  // Real profile data (Phase 2). Roadmap/progress metrics remain honest
+  // zeros until the Phase 3+ engines exist — nothing here is simulated.
+  const profile = await getProfile();
+  const name = profile?.display_name?.trim() || null;
+  const greeting = timeGreeting(profile?.timezone ?? undefined);
+  const today = formatToday(profile?.timezone ?? undefined);
+  const goal = profile?.daily_goal_minutes ?? 45;
 
   return (
     <div className="space-y-6">
@@ -19,7 +22,7 @@ export default function DashboardPage() {
             {greeting}{name ? `, ${name}` : ""}. <span className="text-gradient">What are we learning today?</span>
           </h1>
           <div className="flex items-center gap-2">
-            <Badge tone="accent">Phase 1 · Foundation</Badge>
+            <Badge tone="accent">Phase 2 · Auth live</Badge>
           </div>
         </div>
       </section>
@@ -28,8 +31,8 @@ export default function DashboardPage() {
       <section aria-label="Learning metrics" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Streak" value="0 days" hint="Starts with your first session" tone="accent" />
         <StatCard label="Study time" value="0h 0m" hint="Logged study time" />
+        <StatCard label="Daily goal" value={`${goal} min`} hint={profile?.preferred_study_time ? `Prefers ${profile.preferred_study_time} sessions` : "Set in onboarding"} />
         <StatCard label="Labs" value="0" hint="Completed labs" />
-        <StatCard label="Projects" value="0" hint="Completed projects" />
       </section>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -37,12 +40,12 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2" glow>
           <CardHeader
             title="Today's mission"
-            subtitle="Daily tasks generated from your roadmap position and available time"
+            subtitle={`Daily tasks generated from your roadmap position and your ${goal}-minute goal`}
             action={<Badge tone="neutral">Arrives in Phase 6</Badge>}
           />
           <EmptyState
             title="Your first mission is on its way"
-            body="Missions are generated from the roadmap once you set a daily goal and your account exists. Today's dashboard is the foundation — the engine comes next."
+            body="Missions are generated from the roadmap once the topic engine exists (Phase 4) and the daily planner (Phase 6) lands. Your goal and preferences are already saved."
             action={
               <Link href="/roadmap" className={buttonClasses({ variant: "secondary", size: "sm" })}>
                 Preview the roadmap
@@ -97,7 +100,11 @@ export default function DashboardPage() {
           />
           <EmptyState
             title="Recommendations unlock with your progress data"
-            body="The engine weighs prerequisites, weak skills, revision queue and your available time to answer one question: what now? It needs your roadmap progress first."
+            body={
+              profile?.target_roles?.length
+                ? `Your interest in ${profile.target_roles[0]} is saved — the engine will weigh it once roadmap progress exists (Phase 14).`
+                : "The engine weighs prerequisites, weak skills, revision queue and your available time to answer one question: what now? It needs your roadmap progress first."
+            }
             action={
               <Link href="/roadmap" className={buttonClasses({ variant: "primary", size: "sm" })}>
                 Start the roadmap

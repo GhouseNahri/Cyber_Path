@@ -3,7 +3,6 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/jetbrains-mono";
 import "../styles/globals.css";
-import { AppShell } from "@/components/shell/AppShell";
 
 export const metadata: Metadata = {
   title: {
@@ -41,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        <AppShell>{children}</AppShell>
+        {children}
       </body>
     </html>
   );

@@ -3,8 +3,15 @@
 import { ThemeToggle } from "../ThemeToggle";
 import { BrandMark } from "./Sidebar";
 
-/** Mobile topbar: brand + drawer trigger + theme toggle. Hidden ≥ lg. */
-export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
+type TopbarProps = {
+  onOpenMenu: () => void;
+  children?: React.ReactNode;
+};
+
+/** Mobile topbar: brand + drawer trigger + theme toggle + user chip.
+ *  Hidden ≥ lg where the desktop header row (rendered by the page layout)
+ *  takes over. */
+export function Topbar({ onOpenMenu, children }: TopbarProps) {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-hairline bg-canvas/80 px-4 backdrop-blur-md lg:hidden">
       <div className="flex items-center gap-2">
@@ -21,7 +28,10 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
         </button>
         <BrandMark />
       </div>
-      <ThemeToggle />
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        {children}
+      </div>
     </header>
   );
 }
