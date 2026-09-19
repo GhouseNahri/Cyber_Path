@@ -1,0 +1,182 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* ==========================================================================
+   Tailwind 4 theme bridge — expose semantic tokens as utilities:
+   bg-surface, text-ink, border-hairline, text-accent, shadow-rest …
+   ========================================================================== */
+@theme inline {
+  --color-ink-highest: hsl(var(--color-ink-highest));
+  --color-ink-high: hsl(var(--color-ink-high));
+  --color-ink: hsl(var(--color-ink));
+  --color-ink-medium: hsl(var(--color-ink-medium));
+  --color-ink-low: hsl(var(--color-ink-low));
+  --color-ink-faint: hsl(var(--color-ink-faint));
+
+  --color-canvas: hsl(var(--color-canvas));
+  --color-canvas-raised: hsl(var(--color-canvas-raised));
+  --color-surface: hsl(var(--color-surface));
+  --color-surface-2: hsl(var(--color-surface-2));
+  --color-surface-3: hsl(var(--color-surface-3));
+  --color-hairline: hsl(var(--color-hairline));
+  --color-hairline-strong: hsl(var(--color-hairline-strong));
+
+  --color-accent: hsl(var(--color-accent));
+  --color-accent-ink: hsl(var(--color-accent-ink));
+  --color-accent-soft: hsl(var(--color-accent-soft));
+  --color-accent-2: hsl(var(--color-accent-2));
+  --color-accent-2-soft: hsl(var(--color-accent-2-soft));
+
+  --color-warn: hsl(var(--color-warn));
+  --color-warn-ink: hsl(var(--color-warn-ink));
+  --color-danger: hsl(var(--color-danger));
+  --color-danger-ink: hsl(var(--color-danger-ink));
+  --color-ok: hsl(var(--color-ok));
+  --color-ok-ink: hsl(var(--color-ok-ink));
+  --color-info: hsl(var(--color-info));
+
+  --shadow-rest: var(--shadow-rest);
+  --shadow-lift: var(--shadow-lift);
+
+  --font-display: "Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", monospace;
+
+  --ease-out-expo: var(--ease-out-expo);
+  --ease-spring: var(--ease-spring);
+}
+
+/* ==========================================================================
+   Base layer
+   ========================================================================== */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display text-ink-high;
+  }
+
+  /* Visible, consistent focus everywhere */
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background-color: hsl(var(--color-accent) / 0.35);
+  }
+
+  /* Slim, theme-aware scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--color-hairline-strong)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--color-hairline-strong));
+    border-radius: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Reduced motion — honor the OS preference globally */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ==========================================================================
+   Reusable primitives (composed by components, not page markup)
+   ========================================================================== */
+@utility surface-card {
+  border-radius: 14px;
+  border: 1px solid hsl(var(--color-hairline));
+  background-color: hsl(var(--color-surface));
+  box-shadow: var(--shadow-rest);
+}
+
+/* Subtle top-edge gradient used on premium cards */
+@utility surface-glow {
+  position: relative;
+}
+.surface-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--color-accent) / 0.5),
+    hsl(var(--color-accent-2) / 0.5),
+    transparent
+  );
+  pointer-events: none;
+}
+
+@utility text-gradient {
+  background: linear-gradient(92deg, hsl(var(--color-ink-highest)), hsl(var(--color-accent-soft)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Page-level entrance animation (subtle, GPU-friendly) */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility animate-rise {
+  animation: rise-in var(--dur-slow) var(--ease-out-expo) both;
+}
+
+/* Skeleton shimmer for loading states */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@utility skeleton {
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--color-surface-2)) 25%,
+    hsl(var(--color-surface-3)) 37%,
+    hsl(var(--color-surface-2)) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
