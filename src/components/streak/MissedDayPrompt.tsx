@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useTransition, useState } from "react";
 import { Badge, Card, CardHeader, buttonClasses } from "@/components/ui";
 import { recordMissedDay } from "@/lib/streak/actions";
 import { MISSED_REASON_LABELS, type MissedReasonCategory } from "@/lib/streak/messages";
@@ -18,11 +18,27 @@ type Props = {
  *  will mine for patterns. Never shown for days the user actually studied. */
 export function MissedDayPrompt({ dayKey, existingReason }: Props) {
   const [pending, startTransition] = useTransition();
+  const [response, setResponse] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function submit(reason: MissedReasonCategory, text?: string) {
     startTransition(async () => {
-      await recordMissedDay({ dayKey, reason, text });
+      const result = await recordMissedDay({ dayKey, reason, text });
+      if (result.ok) {
+        setResponse(result.message ?? "Noted. Tomorrow is a fresh page.");
+      } else {
+        setError(result.error ?? "Something went wrong.");
+      }
     });
+  }
+
+  if (response) {
+    return (
+      <Card>
+        <CardHeader title="Noted." subtitle="Logged for pattern analysis" />
+        <p className="text-sm leading-relaxed text-ink-medium" aria-live="polite">{response}</p>
+      </Card>
+    );
   }
 
   return (
@@ -53,6 +69,11 @@ export function MissedDayPrompt({ dayKey, existingReason }: Props) {
           ))}
         </fieldset>
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          {error ? (
+            <p role="alert" className="text-[13px] text-danger">
+              {error}
+            </p>
+          ) : null}
           <label htmlFor="reason_text" className="sr-only">
             Optional details
           </label>
