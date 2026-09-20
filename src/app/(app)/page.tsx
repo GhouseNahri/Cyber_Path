@@ -5,6 +5,8 @@ import { timeGreeting, formatToday } from "@/lib/greeting";
 import { getProfile } from "@/lib/profile";
 import { getRoadmapOverview } from "@/lib/roadmap/queries";
 import { STAGE_ORDER } from "@/lib/roadmap/types";
+import { getMissionState, getStudyTotals } from "@/lib/session/queries";
+import { TASK_KIND_META } from "@/lib/session/types";
 
 export default async function DashboardPage() {
   const profile = await getProfile();
@@ -26,6 +28,12 @@ export default async function DashboardPage() {
   const totals = hasRoadmap ? overview.totals : null;
   const roadmapPct = totals && totals.topics > 0 ? Math.round((totals.completed / totals.topics) * 100) : 0;
 
+  const missionState = await getMissionState();
+  const studyTotals = await getStudyTotals();
+  const titleBySlug = new Map(
+    hasRoadmap ? overview.phases.flatMap((p) => p.topics).map((t) => [t.slug, t.title] as const) : []
+  );
+
   return (
     <div className="space-y-6">
       {/* ── Welcome ─────────────────────────────────────────────────── */}
@@ -44,7 +52,11 @@ export default async function DashboardPage() {
       {/* ── Stat strip ───────────────────────────────────────────────── */}
       <section aria-label="Learning metrics" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Streak" value="0 days" hint="Starts with your first session" tone="accent" />
-        <StatCard label="Study time" value="0h 0m" hint="Logged study time" />
+        <StatCard
+          label="Study time"
+          value={studyTotals ? formatStudyTime(studyTotals.seconds) : "—"}
+          hint={studyTotals ? `${studyTotals.sessions} session${studyTotals.sessions === 1 ? "" : "s"} logged` : "Appears once migrations run"}
+ />
         <StatCard
           label="Topics"
           value={totals ? `${totals.completed}/${totals.topics}` : "—"}
@@ -52,6 +64,48 @@ export default async function DashboardPage() {
         />
         <StatCard label="Daily goal" value={`${goal} min`} hint={profile?.preferred_study_time ? `Prefers ${profile.preferred_study_time} sessions` : "Set in onboarding"} />
       </section>
+
+      {/* ── Today's mission ────────────────────────────────────────── */}
+      {missionState.ok && missionState.mission.tasks.length > 0 ? (
+        <Card glow>
+          <CardHeader
+            title="Today's mission"
+            subtitle="Generated from your roadmap position — in-progress first, sized to your goal"
+            action={<Badge tone="accent">{missionState.mission.remainingMinutes} min left</Badge>}
+          />
+          <ol className="space-y-3">
+            {missionState.mission.tasks.map((t, i) => (
+              <li key={t.id} className="rounded-xl border border-hairline bg-surface-2/40 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 font-mono text-[11px] text-ink-low">{String(i + 1).padStart(2, "0")}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-ink-high">{t.title}</p>
+                    <p className="mt-0.5 text-[13px] leading-relaxed text-ink-medium">{t.why}</p>
+                    <p className="mt-1 font-mono text-[11px] text-ink-low">
+                      {TASK_KIND_META[t.kind].label} · {titleBySlug.get(t.topic_slug) ?? t.topic_slug.replaceAll("-", " ")} · ~{t.planned_minutes} min
+                    </p>
+                  </div>
+                  <Badge tone={t.status === "done" ? "ok" : t.status === "skipped" ? "neutral" : "info"}>
+                    {t.status === "done" ? "Done" : t.status === "skipped" ? "Skipped" : "To do"}
+                  </Badge>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="font-mono text-[11px] text-ink-low">
+              {missionState.mission.tasks.filter((t) => t.status === "done").length}/{missionState.mission.tasks.length} tasks complete
+            </p>
+            <Link href="/session" className={buttonClasses({ variant: "primary", size: "sm" })}>
+              {missionState.mission.settled
+                ? "Session summary"
+                : missionState.session && !missionState.session.ended_at
+                  ? "Continue session"
+                  : "Start session"}
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* ── What should I do now ──────────────────────────────────── */}
@@ -168,6 +222,13 @@ export default async function DashboardPage() {
       </div>
     </div>
   );
+}
+
+/** Seconds → "2h 05m" / "45m" for the stat strip. */
+function formatStudyTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
 }
 
 /** Small server-rendered snapshot: top 4 skills by progress. */
