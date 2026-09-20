@@ -57,15 +57,44 @@ describe("generateMission", () => {
     expect(new Set(tasks.map((t) => t.topic_slug)).size).toBe(tasks.length);
   });
 
-  it("creates review tasks for completed low-confidence topics", () => {
+  it("creates review tasks from the due-revision queue, ranked first", () => {
     const tasks = generateMission({
       goalMinutes: 30,
       timezone: "UTC",
       topics: [
+        topic({ slug: "wip" }),
         topic({ slug: "done-weak", progress: { status: "completed", stages: { read: true, practice: true, test: true, build: true }, confidence: 2, last_practiced_at: null, completed_at: "2026-09-01" } }),
       ],
+      dueRevisionSlugs: new Set(["done-weak"]),
     });
+    expect(tasks[0]?.topic_slug).toBe("done-weak");
     expect(tasks[0]?.kind).toBe("review");
+    expect(tasks[1]?.topic_slug).toBe("wip");
+  });
+
+  it("caps revisions at 2 per mission", () => {
+    const tasks = generateMission({
+      goalMinutes: 60,
+      timezone: "UTC",
+      topics: [
+        topic({ slug: "r1", progress: { status: "completed", stages: { read: true, practice: true, test: true, build: true }, confidence: 5, last_practiced_at: null, completed_at: "2026-09-01" } }),
+        topic({ slug: "r2", progress: { status: "completed", stages: { read: true, practice: true, test: true, build: true }, confidence: 5, last_practiced_at: null, completed_at: "2026-09-01" } }),
+        topic({ slug: "r3", progress: { status: "completed", stages: { read: true, practice: true, test: true, build: true }, confidence: 5, last_practiced_at: null, completed_at: "2026-09-01" } }),
+      ],
+      dueRevisionSlugs: new Set(["r1", "r2", "r3"]),
+    });
+    expect(tasks.filter((t) => t.kind === "review")).toHaveLength(2);
+  });
+
+  it("never schedules reviews for topics outside the due set", () => {
+    const tasks = generateMission({
+      goalMinutes: 45,
+      timezone: "UTC",
+      topics: [
+        topic({ slug: "done-strong", progress: { status: "completed", stages: { read: true, practice: true, test: true, build: true }, confidence: 5, last_practiced_at: null, completed_at: "2026-09-01" } }),
+      ],
+    });
+    expect(tasks).toHaveLength(0);
   });
 
   it("ignores locked and completed (non-review) topics", () => {

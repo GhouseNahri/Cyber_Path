@@ -13,6 +13,8 @@ export type Profile = {
   target_roles: string[];
   learning_style: string | null;
   onboarding_completed: boolean;
+  /** Spaced-repetition ladder in days (migration 0011). Default {1,3,7,14,30}. */
+  revision_intervals: number[];
   created_at: string;
   updated_at: string;
 };

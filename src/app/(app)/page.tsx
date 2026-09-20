@@ -11,6 +11,8 @@ import { getStreakData } from "@/lib/streak/queries";
 import { completionMessage } from "@/lib/streak/messages";
 import { StreakCard, MissedDayPrompt } from "@/components/streak";
 import { yesterdayKey } from "@/lib/streak/messages";
+import { getRevisionQueue } from "@/lib/revision/queries";
+import { RevisionQueueCard } from "@/components/revision/RevisionQueueCard";
 
 export default async function DashboardPage() {
   const profile = await getProfile();
@@ -35,6 +37,7 @@ export default async function DashboardPage() {
   const missionState = await getMissionState();
   const studyTotals = await getStudyTotals();
   const streakData = await getStreakData();
+  const revisionData = await getRevisionQueue();
 
   // Post-mission completion line — only when today is already qualified.
   const completion =
@@ -271,17 +274,22 @@ export default async function DashboardPage() {
         ) : null}
 
         {/* ── Revision queue ────────────────────────────────────────── */}
-        <Card>
-          <CardHeader
-            title="Revision queue"
-            subtitle="Spaced review keeps knowledge from decaying"
-            action={<Badge tone="neutral">Phase 9</Badge>}
+        {revisionData.ok ? (
+          <RevisionQueueCard
+            due={revisionData.due}
+            upcoming={revisionData.upcoming}
+            graduatedCount={revisionData.graduatedCount}
+            todayKey={revisionData.todayKey}
           />
-          <EmptyState
-            title="Nothing to review yet"
-            body="Topics you've completed enter a spaced revision schedule — 1, 3, 7, 14 and 30 days out. Complete a topic and it will appear here."
-          />
-        </Card>
+        ) : (
+          <Card>
+            <CardHeader title="Revision queue" subtitle="Spaced review keeps knowledge from decaying" />
+            <EmptyState
+              title="Queue unavailable"
+              body="Run migration 0011 in the Supabase SQL Editor and the spaced-repetition queue comes alive."
+            />
+          </Card>
+        )}
 
         {/* ── Skills snapshot ───────────────────────────────────────── */}
         <Card>

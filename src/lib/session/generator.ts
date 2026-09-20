@@ -56,22 +56,21 @@ function planMinutes(goalMinutes: number, taskCount: number): number[] {
   return out;
 }
 
-/** A completed topic is review-due when confidence is low or absent. */
-function isReviewDue(topic: TopicView): boolean {
-  return topic.progress.status === "completed" && (topic.progress.confidence === null || topic.progress.confidence <= 3);
-}
-
 /** Resource input for linking learn/practice tasks to real seeded resources. */
 export type ResourceLinkInput = { topic_slug: string; id: string; type: string; priority: number }[];
+
+/** Cap on revision tasks per mission — the day must still move forward. */
+const MAX_REVISION_TASKS = 2;
 
 /**
  * Build today's mission from real roadmap state.
  *
- * Priority: review-due completed topics first (spaced reinforcement), then
- * in-progress topics (finish what you started), then next unlocked topics.
- * Max 3 tasks, max one task per topic. When yesterday generated the exact
- * same task set, the first in-progress/fresh candidate is skipped to force
- * variety.
+ * Priority: due spaced revisions first (from the Phase 9 revision queue),
+ * then in-progress topics (finish what you started), then next unlocked
+ * topics. Max 3 tasks, max one task per topic, revisions capped at 2 so the
+ * mission always advances the roadmap too. When yesterday generated the
+ * exact same task set, the first in-progress/fresh candidate is skipped to
+ * force variety.
  */
 export function generateMission(input: {
   goalMinutes: number;
@@ -79,13 +78,15 @@ export function generateMission(input: {
   topics: TopicView[];
   resources?: ResourceLinkInput;
   yesterdayTaskSignatures?: string[];
+  /** Topic slugs with a scheduled revision due today (or overdue). */
+  dueRevisionSlugs?: ReadonlySet<string>;
   now?: Date;
 }): GeneratedTask[] {
-  const { goalMinutes, timezone, topics, resources, yesterdayTaskSignatures } = input;
+  const { goalMinutes, timezone, topics, resources, yesterdayTaskSignatures, dueRevisionSlugs } = input;
   const now = input.now ?? new Date();
 
   const candidates = topics.filter((t) => !t.locked && t.progress.status !== "completed");
-  const reviewDue = topics.filter((t) => isReviewDue(t)).slice(0, 1);
+  const revisionDue = topics.filter((t) => dueRevisionSlugs?.has(t.slug) ?? false).slice(0, MAX_REVISION_TASKS);
   const inProgress = candidates.filter((t) => t.progress.status === "in_progress");
   const fresh = candidates.filter((t) => t.progress.status === "not_started");
 
@@ -96,11 +97,11 @@ export function generateMission(input: {
     return `${t.slug}:${stage ? KIND_BY_STAGE[stage] : "review"}`;
   };
   const yesterdaySet = new Set(yesterdayTaskSignatures ?? []);
-  const todaySet = new Set([...reviewDue, ...inProgress, ...fresh].slice(0, 3).map(sig));
+  const todaySet = new Set([...revisionDue, ...inProgress, ...fresh].slice(0, 3).map(sig));
   const sameAsYesterday =
     yesterdaySet.size > 0 && todaySet.size > 0 && [...todaySet].every((s) => yesterdaySet.has(s));
 
-  const allOrdered = [...reviewDue, ...inProgress, ...fresh];
+  const allOrdered = [...revisionDue, ...inProgress, ...fresh];
   const ordered: TopicView[] = sameAsYesterday && allOrdered.length > 1 ? allOrdered.slice(1) : allOrdered;
 
   const drafts: { topic: TopicView; stage: StageKey | null }[] = [];
@@ -138,7 +139,7 @@ export function generateMission(input: {
     const hint = d.stage ? hintFor(d.topic, d.stage) : null;
     const stageList = remainingStages(d.topic);
     const why = isReview
-      ? `Completed with confidence ${d.topic.progress.confidence ?? "unrated"}/5 — a quick review keeps it from fading.`
+      ? `Spaced revision from your queue — a short pass now keeps it from fading.`
       : hint ??
         (d.topic.progress.status === "in_progress"
           ? `You're ${4 - stageList.length}/4 stages into “${d.topic.title}” — ${d.stage} is next.`

@@ -4,6 +4,7 @@ import { getProfile } from "@/lib/profile";
 import { getRoadmapOverview } from "@/lib/roadmap/queries";
 import { dayKeyFor, dayKeyRange } from "./day";
 import { generateMission } from "./generator";
+import { getRevisionQueue } from "@/lib/revision/queries";
 import type {
   ActivityDay,
   DailyTask,
@@ -157,6 +158,9 @@ export const getMissionState = cache(async (): Promise<MissionState> => {
     .select("topic_slug, id, type, priority")
     .order("priority");
 
+  // Due spaced revisions (Phase 9) — the generator's top-priority candidates.
+  const queue = await getRevisionQueue();
+
   const generated = generateMission({
     goalMinutes: profile.daily_goal_minutes ?? 45,
     timezone: profile.timezone,
@@ -168,6 +172,7 @@ export const getMissionState = cache(async (): Promise<MissionState> => {
       priority: r.priority,
     })),
     yesterdayTaskSignatures: ((yRows ?? []) as { topic_slug: string; kind: string }[]).map((r) => `${r.topic_slug}:${r.kind}`),
+    dueRevisionSlugs: queue.ok ? queue.dueSlugs : undefined,
   });
 
   if (generated.length === 0) {

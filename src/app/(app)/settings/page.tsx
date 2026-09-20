@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Card, CardHeader, Badge } from "@/components/ui";
 import { getProfile, getUser } from "@/lib/profile";
+import { intervalsOf } from "@/lib/revision/queries";
 import { SettingsForm } from "./SettingsForm";
+import { RevisionIntervalsForm } from "./RevisionIntervalsForm";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -75,6 +77,15 @@ export default async function SettingsPage() {
                 Download my data (JSON)
               </a>
             </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Revision schedule" subtitle="Spaced repetition ladder for completed topics" />
+            {profile ? (
+              <RevisionIntervalsForm initial={intervalsOf(profile)} />
+            ) : (
+              <p className="text-sm text-danger">Profile could not be loaded. Refresh the page.</p>
+            )}
           </Card>
 
           <Card>

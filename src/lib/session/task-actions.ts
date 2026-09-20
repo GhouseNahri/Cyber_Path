@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TASK_KIND_META } from "./types";
 import type { ActionResult } from "@/lib/roadmap/actions";
 import type { SkipReason } from "./types";
+import { completeReview, scheduleFirstReview } from "@/lib/revision/actions";
 
 const TASK_PATHS = ["/", "/session", "/history", "/roadmap", "/skills", "/library"];
 
@@ -31,8 +32,9 @@ async function loadTask(db: Db, userId: string, taskId: string) {
     | null;
 }
 
-/** Mark the matching roadmap stage done for this topic's progress row. */
-async function syncStage(db: Db, userId: string, topicSlug: string, stage: string) {
+/** Mark the matching roadmap stage done for this topic's progress row.
+ *  Returns whether the topic just became fully completed. */
+async function syncStage(db: Db, userId: string, topicSlug: string, stage: string): Promise<boolean> {
   const { data: existing } = await db
     .from("user_topic_progress")
     .select("status, stages")
@@ -50,17 +52,19 @@ async function syncStage(db: Db, userId: string, topicSlug: string, stage: strin
   const allDone = Object.values(stages).every(Boolean);
   const status = allDone ? "completed" : "in_progress";
 
-  return db.from("user_topic_progress").upsert(
+  const { error } = await db.from("user_topic_progress").upsert(
     {
       user_id: userId,
       topic_slug: topicSlug,
       status,
       stages,
       last_practiced_at: stage === "practice" || stage === "build" ? new Date().toISOString() : undefined,
-      completed_at: allDone ? new Date().toISOString() : null,
+      completed_at: allDone ? new Date().toISOString() : undefined,
     },
     { onConflict: "user_id,topic_slug" },
   );
+  if (error) throw new Error(error.message);
+  return allDone;
 }
 
 function revalidateTasks() {
@@ -133,10 +137,23 @@ export async function completeTask(
   // Roadmap integration: a completed task marks its stage on the topic.
   const stage = TASK_KIND_META[task.kind as keyof typeof TASK_KIND_META]?.stage ?? null;
   if (stage) {
-    const { error: syncErr } = await syncStage(supabase, userId, task.topic_slug, stage);
-    if (syncErr) {
+    try {
+      const becameComplete = await syncStage(supabase, userId, task.topic_slug, stage);
+      // Topic just finished → its revision ladder starts now (Phase 9).
+      if (becameComplete) await scheduleFirstReview(supabase, userId, task.topic_slug);
+    } catch {
       return { ok: false, error: "Task saved but roadmap sync failed — toggle the stage from the topic page." };
     }
+  }
+
+  // A completed review task closes the scheduled review and chains the next rung.
+  if (task.kind === "review") {
+    await completeReview(supabase, userId, task.topic_slug);
+    await supabase
+      .from("user_topic_progress")
+      .update({ last_practiced_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("topic_slug", task.topic_slug);
   }
 
   revalidateTasks();

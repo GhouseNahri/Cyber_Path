@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { cancelReviews, scheduleFirstReview } from "@/lib/revision/actions";
 import { STAGE_ORDER, type StageKey } from "./types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -60,6 +61,9 @@ export async function setStage(topicSlug: string, stage: StageKey, done: boolean
   );
   if (error) return { ok: false, error: "Could not save that. Try again in a moment." };
 
+  // Topic fully completed → schedule its first spaced review (Phase 9).
+  if (allDone) await scheduleFirstReview(supabase, userId, topicSlug);
+
   revalidateRoadmap(topicSlug);
   return { ok: true };
 }
@@ -76,6 +80,8 @@ export async function setTopicStatus(topicSlug: string, status: "in_progress" | 
       .eq("user_id", userId)
       .eq("topic_slug", topicSlug);
     if (error) return { ok: false, error: "Could not reset that topic." };
+    // A reset topic has no pending reviews (completed history is kept).
+    await cancelReviews(supabase, userId, topicSlug);
   } else {
     const { data: existing } = await supabase
       .from("user_topic_progress")
