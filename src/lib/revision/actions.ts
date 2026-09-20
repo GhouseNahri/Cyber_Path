@@ -24,12 +24,31 @@ async function requireUser() {
 /**
  * Schedule review #1 for a topic the user just completed. Called from both
  * completion paths (topic-page stage toggle and daily-task completion) so
- * the queue grows no matter how the user finished the topic. Idempotent:
- * the PK (user, topic, review #1) makes a double insert a no-op.
+ * the queue grows no matter how the user finished the topic.
+ *
+ * Idempotent and re-completion safe: if the topic already has pending
+ * reviews (stage re-toggle, parallel call), nothing changes; if it only has
+ * history from a previous learning pass, that history is cleared so the
+ * ladder starts fresh from #1.
  */
 export async function scheduleFirstReview(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, topicSlug: string): Promise<void> {
   const profile = await getProfile();
   if (!profile) return;
+
+  // Already has pending reviews → nothing to do.
+  const { data: scheduled } = await supabase
+    .from("topic_reviews")
+    .select("review_number")
+    .eq("user_id", userId)
+    .eq("topic_slug", topicSlug)
+    .eq("status", "scheduled")
+    .limit(1);
+  if ((scheduled ?? []).length > 0) return;
+
+  // Re-completion after a reset: the old pass's completed rows would block
+  // the PK, so clear them before starting a fresh ladder.
+  await supabase.from("topic_reviews").delete().eq("user_id", userId).eq("topic_slug", topicSlug);
+
   const todayKey = dayKeyFor(profile.timezone);
   const first = firstReview(intervalsFrom(profile.revision_intervals), todayKey);
   if (!first) return;
