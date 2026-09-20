@@ -4,7 +4,10 @@ import { Badge, Card, CardHeader, EmptyState } from "@/components/ui";
 import { getTopicDetail } from "@/lib/roadmap/queries";
 import { getResourceStatusesForTopic } from "@/lib/resources/queries";
 import type { ResourceItem } from "@/lib/resources/types";
+import { getTopicNote, getBookmarkedSlugs } from "@/lib/notes/queries";
 import { ResourceList } from "@/components/resources/ResourceList";
+import { TopicNotes } from "@/components/notes/TopicNotes";
+import { BookmarkButton } from "@/components/notes/BookmarkButton";
 import { StageTracker } from "./StageTracker";
 
 export const metadata = { title: "Topic" };
@@ -22,7 +25,11 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
 
   const { topic, phase, resources, skills } = detail;
   const hints = topic.stage_hints as Partial<Record<string, string>>;
-  const statusMap = await getResourceStatusesForTopic(slug);
+  const [statusMap, note, bookmarks] = await Promise.all([
+    getResourceStatusesForTopic(slug),
+    getTopicNote(slug),
+    getBookmarkedSlugs(),
+  ]);
   const resourceItems: ResourceItem[] = resources.map((r) => ({
     ...r,
     user_status: statusMap.get(r.id) ?? null,
@@ -60,6 +67,9 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
           ) : null}
         </div>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-high">{topic.summary}</p>
+        <div className="mt-4">
+          <BookmarkButton topicSlug={topic.slug} initialBookmarked={bookmarks.has(topic.slug)} />
+        </div>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -95,6 +105,9 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
               </div>
             ) : null}
           </Card>
+
+          {/* ── My notes ───────────────────────────────────────────── */}
+          <TopicNotes topicSlug={topic.slug} initialBody={note} />
 
           {/* ── Resources ──────────────────────────────────────────── */}
           <Card>

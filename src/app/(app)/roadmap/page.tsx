@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Badge, Card, CardHeader, EmptyState, ProgressBar } from "@/components/ui";
+import { Badge, Card, CardHeader, EmptyState, ProgressBar, buttonClasses } from "@/components/ui";
 import { getRoadmapOverview } from "@/lib/roadmap/queries";
+import { getBookmarkedSlugs } from "@/lib/notes/queries";
 import { STAGE_ORDER, type TopicView } from "@/lib/roadmap/types";
 
 export const metadata = { title: "Roadmap" };
@@ -11,7 +12,7 @@ const STATUS_DOT: Record<TopicView["progress"]["status"], { dot: string; label: 
   completed: { dot: "bg-ok", label: "Completed" },
 };
 
-function TopicRowItem({ topic }: { topic: TopicView }) {
+function TopicRowItem({ topic, bookmarked }: { topic: TopicView; bookmarked: boolean }) {
   const st = STATUS_DOT[topic.progress.status];
   const stagesDone = STAGE_ORDER.filter((s) => topic.progress.stages[s]).length;
   const pct = Math.round((stagesDone / STAGE_ORDER.length) * 100);
@@ -32,6 +33,11 @@ function TopicRowItem({ topic }: { topic: TopicView }) {
             <p className="flex items-center gap-2 text-sm font-semibold text-ink-high">
               <span aria-hidden className={`size-2 shrink-0 rounded-full ${st.dot}`} />
               <span className="truncate">{topic.title}</span>
+              {bookmarked ? (
+                <svg viewBox="0 0 24 24" fill="currentColor" className="size-3.5 shrink-0 text-accent" aria-label="Bookmarked">
+                  <path d="M6 4h12a1 1 0 0 1 1 1v15.2a.6.6 0 0 1-.94.5L12 17l-6.06 3.7a.6.6 0 0 1-.94-.5V5a1 1 0 0 1 1-1Z" />
+                </svg>
+              ) : null}
               {topic.is_optional ? <Badge tone="neutral">optional</Badge> : null}
             </p>
             <p className="mt-1 line-clamp-1 text-[13px] text-ink-medium">{topic.summary}</p>
@@ -70,8 +76,23 @@ function TopicRowItem({ topic }: { topic: TopicView }) {
   );
 }
 
-export default async function RoadmapPage() {
+export default async function RoadmapPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ bookmarked?: string }>;
+}) {
+  const { bookmarked: bookmarkedParam } = await searchParams;
+  const onlyBookmarked = bookmarkedParam === "1";
   const overview = await getRoadmapOverview();
+  const bookmarks = await getBookmarkedSlugs();
+
+  const phases = overview.ok
+    ? onlyBookmarked
+      ? overview.phases
+          .map((p) => ({ ...p, topics: p.topics.filter((t) => bookmarks.has(t.slug)) }))
+          .filter((p) => p.topics.length > 0)
+      : overview.phases
+    : [];
 
   return (
     <div className="space-y-8">
@@ -108,7 +129,38 @@ export default async function RoadmapPage() {
           />
         </Card>
       ) : (
-        overview.phases.map((phase) => {
+        <>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/roadmap"
+              aria-current={!onlyBookmarked ? "page" : undefined}
+              className={buttonClasses({ variant: onlyBookmarked ? "ghost" : "secondary", size: "sm" })}
+            >
+              All topics
+            </Link>
+            <Link
+              href="/roadmap?bookmarked=1"
+              aria-current={onlyBookmarked ? "page" : undefined}
+              className={buttonClasses({ variant: onlyBookmarked ? "secondary" : "ghost", size: "sm" })}
+            >
+              Bookmarked{bookmarks.size > 0 ? ` (${bookmarks.size})` : ""}
+            </Link>
+          </div>
+
+          {onlyBookmarked && phases.length === 0 ? (
+            <Card>
+              <EmptyState
+                title="No bookmarks yet"
+                body="Open any topic and tap Bookmark to keep it one click away — perfect for topics that look interesting but aren't your next step."
+                action={
+                  <Link href="/roadmap" className={buttonClasses({ variant: "secondary", size: "sm" })}>
+                    Browse all topics
+                  </Link>
+                }
+              />
+            </Card>
+          ) : (
+            phases.map((phase) => {
           const done = phase.topics.filter((t) => t.progress.status === "completed").length;
           const pct = phase.topics.length ? Math.round((done / phase.topics.length) * 100) : 0;
           return (
@@ -134,12 +186,14 @@ export default async function RoadmapPage() {
 
               <ul className="mt-4 grid gap-3 lg:grid-cols-2">
                 {phase.topics.map((t) => (
-                  <TopicRowItem key={t.slug} topic={t} />
+                  <TopicRowItem key={t.slug} topic={t} bookmarked={bookmarks.has(t.slug)} />
                 ))}
               </ul>
             </section>
           );
-        })
+          })
+          )}
+        </>
       )}
 
       {!overview.ok ? null : (

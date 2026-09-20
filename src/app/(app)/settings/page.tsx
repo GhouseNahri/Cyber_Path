@@ -58,6 +58,26 @@ export default async function SettingsPage() {
           </Card>
 
           <Card>
+            <CardHeader title="Your data" subtitle="Take it with you — it's yours" />
+            <p className="text-[13px] leading-relaxed text-ink-medium">
+              Download everything the app stores about you: profile, topic progress, sessions,
+              tasks, missed-day reports, notes, bookmarks and resource statuses — as readable JSON.
+            </p>
+            <div className="mt-3">
+              <a
+                href="/settings/export"
+                download
+                className="inline-flex items-center gap-2 rounded-xl border border-hairline bg-surface-2 px-4 py-2 text-sm font-medium text-ink-high transition-colors hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden="true">
+                  <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Download my data (JSON)
+              </a>
+            </div>
+          </Card>
+
+          <Card>
             <CardHeader title="Appearance" subtitle="Theme preference is saved on this device" />
             <p className="text-[13px] leading-relaxed text-ink-medium">
               Use the sun/moon toggle in the header. Your choice persists locally; account-level
