@@ -102,12 +102,16 @@ export default async function DashboardPage() {
         </section>
       ) : null}
 
-      {/* ── Missed-day accountability prompt ─────────────────────────── */}
+      {/* ── Missed-day accountability ───────────────────────────────── */}
       {streakData.ok &&
-      !streakData.streak.todayQualified &&
-      streakData.missedByDay.get(yesterdayKey(streakData.todayKey)) === undefined ? (
-        <MissedDayPrompt dayKey={yesterdayKey(streakData.todayKey)} existingReason={null} />
-      ) : null}
+        (streakData.missedResponse ? (
+          <section aria-live="polite" className="animate-rise rounded-xl border border-hairline bg-surface-2/40 px-5 py-4">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-low">Yesterday, noted</p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-medium">{streakData.missedResponse}</p>
+          </section>
+        ) : !streakData.streak.todayQualified ? (
+          <MissedDayPrompt dayKey={yesterdayKey(streakData.todayKey)} existingReason={null} />
+        ) : null)}
 
       {/* ── Today's mission ────────────────────────────────────────── */}
       {missionState.ok && missionState.mission.tasks.length > 0 ? (

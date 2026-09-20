@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/profile";
 import { dayKeyFor, dayKeyRange } from "@/lib/session/day";
 import { computeStreak, STREAK_MILESTONES, DEFAULT_STREAK_CONFIG } from "./engine";
+import { missedDayMessage, type MissedReasonCategory } from "./messages";
 import type { DayActivity } from "./engine";
 
 /** Per-day activity across the look-back window: seconds from closed
@@ -24,6 +25,9 @@ export type StreakData = {
   missedByDay: Map<string, { reason_category: string; reason_text: string | null }>;
   /** Recent missed days, newest first, for the pattern card. */
   recentMissed: { day_key: string; reason_category: string; reason_text: string | null }[];
+  /** Accountability response for yesterday's missed day (server-rendered,
+   *  deterministic — identical to what the action returned at log time). */
+  missedResponse: string | null;
 };
 
 export const getStreakData = cache(async (lookbackDays = 120): Promise<StreakData> => {
@@ -42,6 +46,7 @@ export const getStreakData = cache(async (lookbackDays = 120): Promise<StreakDat
     activity: [],
     missedByDay: new Map(),
     recentMissed: [],
+    missedResponse: null,
   });
 
   const profile = await getProfile();
@@ -92,6 +97,21 @@ export const getStreakData = cache(async (lookbackDays = 120): Promise<StreakDat
   const missedRows = (missedRes.data ?? []) as { day_key: string; reason_category: string; reason_text: string | null }[];
   const missedByDay = new Map(missedRows.map((r) => [r.day_key, { reason_category: r.reason_category, reason_text: r.reason_text }]));
 
+  // Yesterday's accountability response, if it was reported as missed.
+  const yesterday = dayKeyRange(todayKey, 2)[0] ?? "";
+  const missedYesterday = yesterday ? missedByDay.get(yesterday) : undefined;
+  const missedResponse = missedYesterday && yesterday
+    ? missedDayMessage(
+        missedYesterday.reason_category as MissedReasonCategory,
+        yesterday,
+        computeStreak(
+          activity.filter((a) => a.day_key <= yesterday),
+          yesterday,
+          DEFAULT_STREAK_CONFIG,
+        ).current,
+      )
+    : null;
+
   return {
     ok: true,
     missingSchema: false,
@@ -100,6 +120,7 @@ export const getStreakData = cache(async (lookbackDays = 120): Promise<StreakDat
     activity,
     missedByDay,
     recentMissed: missedRows,
+    missedResponse,
   };
 });
 
