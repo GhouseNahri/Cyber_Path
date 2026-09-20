@@ -171,10 +171,15 @@ export function TaskRunner({ mission, session, goalMinutes }: Props) {
           </p>
         ) : null}
         <div className="mt-4 flex flex-wrap gap-2">
-          <Link href="/" className={buttonClasses({ variant: "primary", size: "sm" })}>
+          {tasks.some((t) => t.status === "not_started" || t.status === "in_progress") ? (
+            <Button onClick={handleStart} disabled={pending} variant="primary" size="sm">
+              Start another session
+            </Button>
+          ) : null}
+          <Link href="/" className={buttonClasses({ variant: "secondary", size: "sm" })}>
             Back to dashboard
           </Link>
-          <Link href="/history" className={buttonClasses({ variant: "secondary", size: "sm" })}>
+          <Link href="/history" className={buttonClasses({ variant: "ghost", size: "sm" })}>
             View history
           </Link>
         </div>

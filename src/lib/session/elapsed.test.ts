@@ -30,9 +30,15 @@ describe("elapsedSeconds", () => {
   });
 
   it("freezes at the pause moment when paused (last_resumed_at anchors)", () => {
-    const s = session({ status: "paused", paused_seconds: 120, last_resumed_at: new Date(t(20)).toISOString() });
-    // Window = 20 min = 1200s; minus 120s paused = 1080s, regardless of now.
-    expect(elapsedSeconds(s, t(60))).toBe(1080);
+    const s = session({ status: "paused", paused_seconds: 0, last_resumed_at: new Date(t(20)).toISOString() });
+    // Paused at the 20-min mark: frozen at 1200s regardless of now.
+    expect(elapsedSeconds(s, t(60))).toBe(1200);
+  });
+
+  it("subtracts pause banked at resume", () => {
+    // 10 min banked as paused, resumed, now at the 25-min mark.
+    const s = session({ paused_seconds: 600 });
+    expect(elapsedSeconds(s, t(25))).toBe(900);
   });
 
   it("clamps to 12h", () => {

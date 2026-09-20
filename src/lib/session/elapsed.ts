@@ -1,11 +1,13 @@
 /** Pure session-time math — the single source of truth used by BOTH the
- *  client timer (rendering) and the server actions (persisting), so the
- *  displayed time and the logged time can never disagree.
+ *  client timer and the server actions, so displayed and logged time can
+ *  never disagree.
  *
- *  Rules:
+ *  Model (corrected after live testing):
  *  - closed sessions (completed/abandoned) return the stored duration
- *  - active sessions: wall clock since start, minus banked pause
- *  - paused sessions: frozen at last_resumed_at (the pause moment)
+ *  - active: wall clock since started_at, minus banked paused_seconds
+ *  - paused: frozen at last_resumed_at (the pause moment) minus banked
+ *    pause; the paused stretch itself is banked at resume, avoiding the
+ *    double-subtraction that froze the timer at 00:00.
  */
 
 export type ElapsedSessionInput = {

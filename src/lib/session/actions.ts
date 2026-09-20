@@ -107,17 +107,12 @@ export async function pauseSession(sessionId: string): Promise<ActionResult> {
   if (session.status === "paused") return { ok: true }; // idempotent
   if (session.status !== "active") return { ok: false, error: "Session is not running." };
 
-  // Bank the active stretch, then park the pause MOMENT in last_resumed_at
-  // so the frozen elapsed time stays computable from DB fields alone.
-  const since = session.last_resumed_at
-    ? Math.round((Date.now() - new Date(session.last_resumed_at).getTime()) / 1000)
-    : 0;
-  const banked = Math.max(0, Math.min(since, MAX_SESSION_SECONDS));
+  // Park the pause MOMENT only — the paused stretch gets banked at resume.
+  // (Banking here would double-subtract and freeze the timer at 00:00.)
   const { error } = await supabase
     .from("study_sessions")
     .update({
       status: "paused",
-      paused_seconds: session.paused_seconds + banked,
       last_resumed_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
@@ -135,19 +130,35 @@ export async function resumeSession(sessionId: string): Promise<ActionResult> {
 
   const { data: row } = await supabase
     .from("study_sessions")
-    .select("id, status")
+    .select("id, status, last_resumed_at")
     .eq("id", sessionId)
     .eq("user_id", userId)
     .maybeSingle();
-  const session = row as { id: string; status: string } | null;
+  const session = row as { id: string; status: string; last_resumed_at: string | null } | null;
 
   if (!session) return { ok: false, error: "Session not found." };
   if (session.status === "active") return { ok: true }; // idempotent
   if (session.status !== "paused") return { ok: false, error: "Only a paused session can resume." };
 
+  // Bank the paused stretch: now − pause moment (last_resumed_at), clamped.
+  const pausedFor = session.last_resumed_at
+    ? Math.max(0, Math.min(Math.round((Date.now() - new Date(session.last_resumed_at).getTime()) / 1000), MAX_SESSION_SECONDS))
+    : 0;
+  const { data: cur } = await supabase
+    .from("study_sessions")
+    .select("paused_seconds")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const banked = (cur as { paused_seconds: number } | null)?.paused_seconds ?? 0;
+
   const { error } = await supabase
     .from("study_sessions")
-    .update({ status: "active", last_resumed_at: new Date().toISOString() })
+    .update({
+      status: "active",
+      paused_seconds: banked + pausedFor,
+      last_resumed_at: null,
+    })
     .eq("id", sessionId)
     .eq("user_id", userId);
   if (error) return { ok: false, error: "Could not resume the session." };
