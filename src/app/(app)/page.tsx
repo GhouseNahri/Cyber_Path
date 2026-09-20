@@ -7,6 +7,10 @@ import { getRoadmapOverview } from "@/lib/roadmap/queries";
 import { STAGE_ORDER } from "@/lib/roadmap/types";
 import { getMissionState, getStudyTotals } from "@/lib/session/queries";
 import { TASK_KIND_META } from "@/lib/session/types";
+import { getStreakData } from "@/lib/streak/queries";
+import { completionMessage } from "@/lib/streak/messages";
+import { StreakCard, MissedDayPrompt } from "@/components/streak";
+import { yesterdayKey } from "@/lib/streak/messages";
 
 export default async function DashboardPage() {
   const profile = await getProfile();
@@ -30,6 +34,13 @@ export default async function DashboardPage() {
 
   const missionState = await getMissionState();
   const studyTotals = await getStudyTotals();
+  const streakData = await getStreakData();
+
+  // Post-mission completion line — only when today is already qualified.
+  const completion =
+    streakData.ok && streakData.streak.todayQualified
+      ? completionMessage(streakData.streak.current, streakData.todayKey)
+      : null;
   const titleBySlug = new Map(
     hasRoadmap ? overview.phases.flatMap((p) => p.topics).map((t) => [t.slug, t.title] as const) : []
   );
@@ -51,7 +62,26 @@ export default async function DashboardPage() {
 
       {/* ── Stat strip ───────────────────────────────────────────────── */}
       <section aria-label="Learning metrics" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Streak" value="0 days" hint="Starts with your first session" tone="accent" />
+        <StatCard
+          label="Streak"
+          value={
+            streakData.ok
+              ? streakData.streak.atRiskToday && !streakData.streak.todayQualified
+                ? `${streakData.streak.current}*`
+                : `${streakData.streak.current} day${streakData.streak.current === 1 ? "" : "s"}`
+              : "—"
+          }
+          hint={
+            streakData.ok
+              ? streakData.streak.atRiskToday && !streakData.streak.todayQualified
+                ? "On the board — today decides if it grows"
+                : streakData.streak.todayQualified
+                  ? "Today is locked in"
+                  : "Complete one task to start"
+              : "Starts with your first session"
+          }
+          tone="accent"
+        />
         <StatCard
           label="Study time"
           value={studyTotals ? formatStudyTime(studyTotals.seconds) : "—"}
@@ -64,6 +94,20 @@ export default async function DashboardPage() {
         />
         <StatCard label="Daily goal" value={`${goal} min`} hint={profile?.preferred_study_time ? `Prefers ${profile.preferred_study_time} sessions` : "Set in onboarding"} />
       </section>
+
+      {/* ── Completion line (only after a qualified day) ─────────────── */}
+      {completion ? (
+        <section aria-live="polite" className="animate-rise rounded-xl border border-ok/30 bg-ok/[0.06] px-5 py-4">
+          <p className="text-sm font-medium text-ink-high">{completion}</p>
+        </section>
+      ) : null}
+
+      {/* ── Missed-day accountability prompt ─────────────────────────── */}
+      {streakData.ok &&
+      !streakData.streak.todayQualified &&
+      streakData.missedByDay.get(yesterdayKey(streakData.todayKey)) === undefined ? (
+        <MissedDayPrompt dayKey={yesterdayKey(streakData.todayKey)} existingReason={null} />
+      ) : null}
 
       {/* ── Today's mission ────────────────────────────────────────── */}
       {missionState.ok && missionState.mission.tasks.length > 0 ? (
@@ -209,7 +253,19 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* ── Streak ─────────────────────────────────────────────────── */}
+        {streakData.ok ? (
+          <StreakCard
+            current={streakData.streak.current}
+            longest={streakData.streak.longest}
+            totalActiveDays={streakData.streak.totalActiveDays}
+            todayQualified={streakData.streak.todayQualified}
+            atRiskToday={streakData.streak.atRiskToday}
+            activity={streakData.activity}
+          />
+        ) : null}
+
         {/* ── Revision queue ────────────────────────────────────────── */}
         <Card>
           <CardHeader

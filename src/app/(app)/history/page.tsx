@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Badge, Card, CardHeader, EmptyState, buttonClasses } from "@/components/ui";
 import { getHistory } from "@/lib/session/queries";
 import { getProfile } from "@/lib/profile";
+import { getStreakData } from "@/lib/streak/queries";
+import { MISSED_REASON_LABELS, type MissedReasonCategory } from "@/lib/streak/messages";
 import type { ActivityDay, SessionHistoryRow } from "@/lib/session/types";
 
 export const metadata = { title: "History" };
@@ -60,6 +62,8 @@ function CalendarHeatmap({ calendar, goalMinutes }: { calendar: ActivityDay[]; g
 export default async function HistoryPage() {
   const profile = await getProfile();
   const history = await getHistory(8);
+  const streakData = await getStreakData(56);
+  const missedDays = streakData.ok ? streakData.recentMissed : [];
 
   return (
     <div className="space-y-6">
@@ -87,6 +91,28 @@ export default async function HistoryPage() {
             <CardHeader title="Last 8 weeks" subtitle="Days studied against your daily goal" />
             <CalendarHeatmap calendar={history.calendar} goalMinutes={profile?.daily_goal_minutes ?? 45} />
           </Card>
+
+          {missedDays.length > 0 ? (
+            <Card>
+              <CardHeader
+                title={`${missedDays.length} missed ${missedDays.length === 1 ? "day" : "days"}`}
+                subtitle="Self-reported — feeds the pattern analysis that tunes your plan"
+              />
+              <ul className="divide-y divide-hairline">
+                {missedDays.slice(0, 8).map((m) => (
+                  <li key={m.day_key} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
+                    <span className="text-sm font-semibold text-ink-high">{fmtDate(m.day_key)}</span>
+                    <Badge tone="neutral">
+                      {MISSED_REASON_LABELS[m.reason_category as MissedReasonCategory] ?? m.reason_category}
+                    </Badge>
+                    {m.reason_text ? (
+                      <span className="w-full text-[12px] text-ink-medium italic">{m.reason_text}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
 
           {history.sessions.length === 0 ? (
             <Card>
