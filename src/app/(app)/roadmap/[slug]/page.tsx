@@ -2,21 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, CardHeader, EmptyState } from "@/components/ui";
 import { getTopicDetail } from "@/lib/roadmap/queries";
+import { getResourceStatusesForTopic } from "@/lib/resources/queries";
+import type { ResourceItem } from "@/lib/resources/types";
+import { ResourceList } from "@/components/resources/ResourceList";
 import { StageTracker } from "./StageTracker";
 
 export const metadata = { title: "Topic" };
-
-const TYPE_LABEL: Record<string, string> = {
-  documentation: "Docs",
-  article: "Article",
-  video: "Video",
-  course: "Course",
-  interactive_lab: "Interactive lab",
-  ctf: "CTF",
-  book: "Book",
-  cheat_sheet: "Cheat sheet",
-  exercise: "Exercise",
-};
 
 const DIFF_LABEL: Record<string, string> = {
   beginner: "Beginner",
@@ -31,6 +22,13 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
 
   const { topic, phase, resources, skills } = detail;
   const hints = topic.stage_hints as Partial<Record<string, string>>;
+  const statusMap = await getResourceStatusesForTopic(slug);
+  const resourceItems: ResourceItem[] = resources.map((r) => ({
+    ...r,
+    user_status: statusMap.get(r.id) ?? null,
+    topic_title: topic.title,
+    topic_phase_title: phase.title,
+  }));
 
   return (
     <div className="space-y-6">
@@ -110,37 +108,7 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
                 body="Later content phases fill this in. For now, the stage hints above point at what to do."
               />
             ) : (
-              <ul className="divide-y divide-hairline">
-                {resources.map((r) => (
-                  <li key={r.id} className="py-3 first:pt-0 last:pb-0">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <a
-                        href={r.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-semibold text-ink-high hover:text-accent hover:underline"
-                      >
-                        {r.title}
-                        <span aria-hidden className="ml-1 inline-block">↗</span>
-                      </a>
-                      <span className="font-mono text-[11px] text-ink-low">
-                        {r.provider} · {TYPE_LABEL[r.type] ?? r.type}
-                        {r.estimated_minutes ? ` · ~${r.estimated_minutes}m` : ""}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      {r.is_official ? <Badge tone="info">official</Badge> : null}
-                      {r.is_free ? <Badge tone="ok">free</Badge> : <Badge tone="warn">paid</Badge>}
-                      {r.last_verified ? (
-                        <span className="text-[11px] text-ink-low">verified {r.last_verified}</span>
-                      ) : (
-                        <span className="text-[11px] text-warn">not yet verified</span>
-                      )}
-                    </div>
-                    {r.notes ? <p className="mt-1 text-[12px] leading-relaxed text-ink-medium">{r.notes}</p> : null}
-                  </li>
-                ))}
-              </ul>
+              <ResourceList items={resourceItems} showTopic={false} />
             )}
           </Card>
         </div>

@@ -27,7 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Roadmap",
     href: "/roadmap",
-    phase: 4,
+    phase: 1,
     description: "Phases, topics and prerequisites",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -39,9 +39,22 @@ export const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    label: "Library",
+    href: "/library",
+    phase: 1,
+    description: "Curated resources, filterable and trackable",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
+        <path d="M5 4.5h3.2a2 2 0 0 1 1.9 1.4L13 15.4a1.5 1.5 0 0 1-1.4 2H8.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        <path d="M19 4.5h-3.2a2 2 0 0 0-1.9 1.4L11 15.4a1.5 1.5 0 0 0 1.4 2h3.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        <path d="M4 20.5h16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     label: "Skills",
     href: "/skills",
-    phase: 8,
+    phase: 1,
     description: "Skill graph with theory vs practice",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
