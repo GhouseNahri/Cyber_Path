@@ -46,3 +46,18 @@ export function minutesSinceLocalMidnight(timezone: string | null | undefined, n
 export function isEveningLocal(timezone: string | null | undefined, now: Date = new Date()): boolean {
   return minutesSinceLocalMidnight(timezone, now) >= 20 * 60;
 }
+
+/** Shift a "YYYY-MM-DD" day key by n days (calendar arithmetic on UTC noon
+ *  so DST shifts can't skip or repeat a date). */
+export function shiftDayKey(dayKey: string, days: number): string {
+  const [y, m, d] = dayKey.split("-").map((x) => Number.parseInt(x, 10));
+  if (!y || !m || !d) return dayKey;
+  const dt = new Date(Date.UTC(y, m - 1, d, 12));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Last n day keys ending at (and including) `endKey`, oldest first. */
+export function dayKeyRange(endKey: string, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => shiftDayKey(endKey, -(n - 1 - i)));
+}

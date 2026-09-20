@@ -10,6 +10,7 @@ export type GeneratedTask = {
   why: string;
   planned_minutes: number;
   position: number;
+  resource_id: string | null;
 };
 
 const KIND_BY_STAGE: Record<StageKey, TaskKind> = {
@@ -24,6 +25,7 @@ const KIND_VERB: Record<TaskKind, string> = {
   practice: "Practice",
   test: "Test yourself on",
   build: "Build something with",
+  review: "Review",
 };
 
 /** Unfinished stages for a topic, roadmap order first. */
@@ -54,42 +56,73 @@ function planMinutes(goalMinutes: number, taskCount: number): number[] {
   return out;
 }
 
+/** A completed topic is review-due when confidence is low or absent. */
+function isReviewDue(topic: TopicView): boolean {
+  return topic.progress.status === "completed" && (topic.progress.confidence === null || topic.progress.confidence <= 3);
+}
+
+/** Resource input for linking learn/practice tasks to real seeded resources. */
+export type ResourceLinkInput = { topic_slug: string; id: string; type: string; priority: number }[];
+
 /**
  * Build today's mission from real roadmap state.
  *
- * Priority: in-progress topics first (finish what you started), then next
- * unlocked topics in phase order. Each mission has at most 3 tasks and at
- * most one task per topic so the day touches 2–3 skills, not one grind.
+ * Priority: review-due completed topics first (spaced reinforcement), then
+ * in-progress topics (finish what you started), then next unlocked topics.
+ * Max 3 tasks, max one task per topic. When yesterday generated the exact
+ * same task set, the first in-progress/fresh candidate is skipped to force
+ * variety.
  */
 export function generateMission(input: {
   goalMinutes: number;
   timezone: string | null | undefined;
   topics: TopicView[];
+  resources?: ResourceLinkInput;
+  yesterdayTaskSignatures?: string[];
   now?: Date;
 }): GeneratedTask[] {
-  const { goalMinutes, timezone, topics } = input;
+  const { goalMinutes, timezone, topics, resources, yesterdayTaskSignatures } = input;
   const now = input.now ?? new Date();
 
   const candidates = topics.filter((t) => !t.locked && t.progress.status !== "completed");
+  const reviewDue = topics.filter((t) => isReviewDue(t)).slice(0, 1);
   const inProgress = candidates.filter((t) => t.progress.status === "in_progress");
   const fresh = candidates.filter((t) => t.progress.status === "not_started");
 
-  // Interleave: in-progress first, then fresh, one task each per pass.
-  const ordered: TopicView[] = [...inProgress, ...fresh];
+  // Signature of a candidate in KIND-space (what daily_tasks stores), so
+  // yesterday's rows are directly comparable: topic + its next task kind.
+  const sig = (t: TopicView) => {
+    const stage = remainingStages(t)[0];
+    return `${t.slug}:${stage ? KIND_BY_STAGE[stage] : "review"}`;
+  };
+  const yesterdaySet = new Set(yesterdayTaskSignatures ?? []);
+  const todaySet = new Set([...reviewDue, ...inProgress, ...fresh].slice(0, 3).map(sig));
+  const sameAsYesterday =
+    yesterdaySet.size > 0 && todaySet.size > 0 && [...todaySet].every((s) => yesterdaySet.has(s));
 
-  const drafts: { topic: TopicView; stage: StageKey }[] = [];
+  const allOrdered = [...reviewDue, ...inProgress, ...fresh];
+  const ordered: TopicView[] = sameAsYesterday && allOrdered.length > 1 ? allOrdered.slice(1) : allOrdered;
 
-  // Pass 1: one task per candidate topic (max 3).
+  const drafts: { topic: TopicView; stage: StageKey | null }[] = [];
+
   for (const topic of ordered) {
     if (drafts.length >= 3) break;
-    const stage = remainingStages(topic)[0];
-    if (!stage) continue;
-    drafts.push({ topic, stage });
+    const stage = remainingStages(topic)[0] ?? null;
+    if (stage) {
+      drafts.push({ topic, stage });
+    } else if (topic.progress.status === "completed") {
+      // Review-due topic: all stages done, but knowledge needs reinforcement.
+      drafts.push({ topic, stage: null });
+    }
   }
 
-  // Pass 2: if fewer than 2 tasks, a second (deeper) task on the first topic.
+  // Review-only mission: add the next real topic so the day still advances.
   const first = drafts[0];
-  if (first && drafts.length < 2) {
+  if (first && drafts.length < 2 && first.topic.progress.status === "completed") {
+    const next = inProgress[0] ?? fresh[0];
+    const nextStage = next ? remainingStages(next)[0] : null;
+    if (next && nextStage) drafts.push({ topic: next, stage: nextStage });
+  } else if (first && drafts.length < 2) {
     const second = remainingStages(first.topic)[1];
     if (second) drafts.push({ topic: first.topic, stage: second });
   }
@@ -97,22 +130,26 @@ export function generateMission(input: {
   if (drafts.length === 0) return [];
 
   const minutes = planMinutes(goalMinutes, drafts.length);
+  const resourceByTopic = new Map((resources ?? []).map((r) => [r.topic_slug, r.id] as const));
 
   return drafts.map((d, i) => {
-    const kind = KIND_BY_STAGE[d.stage];
-    const hint = hintFor(d.topic, d.stage);
+    const isReview = d.topic.progress.status === "completed";
+    const kind: TaskKind = isReview ? "review" : KIND_BY_STAGE[d.stage as StageKey];
+    const hint = d.stage ? hintFor(d.topic, d.stage) : null;
     const stageList = remainingStages(d.topic);
-    const why =
-      hint ??
-      (d.topic.progress.status === "in_progress"
-        ? `You're ${4 - stageList.length}/4 stages into “${d.topic.title}” — ${d.stage} is next.`
-        : `Next unlocked topic on your path; finishing it opens what follows.`);
+    const why = isReview
+      ? `Completed with confidence ${d.topic.progress.confidence ?? "unrated"}/5 — a quick review keeps it from fading.`
+      : hint ??
+        (d.topic.progress.status === "in_progress"
+          ? `You're ${4 - stageList.length}/4 stages into “${d.topic.title}” — ${d.stage} is next.`
+          : `Next unlocked topic on your path; finishing it opens what follows.`);
 
-    const title = hint
-      ? `${KIND_VERB[kind]}: ${truncate(hint, 70)}`
-      : `${KIND_VERB[kind]} ${d.topic.title}`;
+    const title = isReview
+      ? `Review ${d.topic.title}`
+      : hint
+        ? `${KIND_VERB[kind]}: ${truncate(hint, 70)}`
+        : `${KIND_VERB[kind]} ${d.topic.title}`;
 
-    // Evening nudge: trim scope so "today" stays achievable.
     const cap = isEveningLocal(timezone, now) ? Math.max(10, Math.floor(minutes[i] ?? 15)) : (minutes[i] ?? 15);
 
     return {
@@ -122,6 +159,8 @@ export function generateMission(input: {
       why: truncate(why, 160),
       planned_minutes: cap,
       position: i,
+      // Link a resource to learn tasks (the "study" action needs somewhere to go).
+      resource_id: kind === "learn" ? (resourceByTopic.get(d.topic.slug) ?? null) : null,
     };
   });
 }
@@ -136,10 +175,11 @@ export function missionRationale(tasks: GeneratedTask[]): string {
     return "No unlocked work right now — complete or seed more roadmap content.";
   }
   const topics = [...new Set(tasks.map((t) => t.topic_slug))].length;
+  const reviews = tasks.filter((t) => t.kind === "review").length;
   const parts: string[] = [];
+  if (reviews > 0) parts.push(`${reviews} review${reviews === 1 ? "" : "s"} due`);
   if (topics > 1) parts.push(`${topics} topics on deck`);
   else parts.push("one focus topic");
-  parts.push("in-progress work first, then fresh unlocked topics");
-  parts.push("sized to your daily goal");
+  parts.push("review → in-progress → fresh, sized to your goal");
   return parts.join(" · ");
 }

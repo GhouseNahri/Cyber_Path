@@ -4,9 +4,14 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/profile";
 import { dayKeyFor } from "./day";
+import { elapsedSeconds } from "./elapsed";
 import type { ActionResult } from "@/lib/roadmap/actions";
 
-const SESSION_PATHS = ["/", "/session", "/roadmap", "/skills"];
+const SESSION_PATHS = ["/", "/session", "/history", "/roadmap", "/skills", "/library"];
+
+const MAX_SESSION_SECONDS = 12 * 3600;
+
+type Db = Awaited<ReturnType<typeof createClient>>;
 
 async function requireUser() {
   const supabase = await createClient();
@@ -17,28 +22,39 @@ async function requireUser() {
   return { supabase, userId: user.id };
 }
 
-/** Mark a daily task done or skipped (owner-only; RLS enforces too). */
-export async function setTaskStatus(
-  taskId: string,
-  status: "done" | "skipped" | "pending",
-): Promise<ActionResult> {
-  if (!taskId) return { ok: false, error: "Missing task." };
-
-  const { supabase, userId } = await requireUser();
-  if (!userId) return { ok: false, error: "Your session expired — sign in again." };
-
-  const { error } = await supabase
-    .from("daily_tasks")
-    .update({ status })
-    .eq("id", taskId)
-    .eq("user_id", userId);
-  if (error) return { ok: false, error: "Could not update the task. Try again in a moment." };
-
+function revalidateAll() {
   for (const p of SESSION_PATHS) revalidatePath(p);
-  return { ok: true };
 }
 
-/** Start a study session for the user's current local day. */
+/** Force-close an open (active/paused) session with honest active time.
+ *  When paused, last_resumed_at holds the pause moment — use it as the
+ *  time anchor instead of now. */
+async function forceClose(
+  db: Db,
+  userId: string,
+  row: { id: string; status: string; started_at: string; paused_seconds: number; last_resumed_at: string | null },
+  status: "completed" | "abandoned",
+  notes?: string | null,
+) {
+  const duration = elapsedSeconds(
+    { status: row.status, started_at: row.started_at, paused_seconds: row.paused_seconds, last_resumed_at: row.last_resumed_at, duration_seconds: null },
+    Date.now(),
+  );
+  await db
+    .from("study_sessions")
+    .update({
+      status,
+      ended_at: new Date().toISOString(),
+      duration_seconds: duration,
+      notes: notes?.trim() ? notes.trim().slice(0, 2000) : null,
+    })
+    .eq("id", row.id)
+    .eq("user_id", userId);
+}
+
+/** Start a study session for the user's current local day. Any open session
+ *  (active/paused) is first force-closed as abandoned — one live session
+ *  per user, enforced. */
 export async function startSession(): Promise<ActionResult & { sessionId?: string }> {
   const { supabase, userId } = await requireUser();
   if (!userId) return { ok: false, error: "Your session expired — sign in again." };
@@ -46,78 +62,140 @@ export async function startSession(): Promise<ActionResult & { sessionId?: strin
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Profile missing — complete onboarding first." };
 
-  // If an earlier session today is still open, end it first (client crash,
-  // closed tab). Honest closure: duration = wall clock since it started.
   const { data: open } = await supabase
     .from("study_sessions")
-    .select("id, started_at")
+    .select("id, status, started_at, paused_seconds, last_resumed_at")
     .eq("user_id", userId)
-    .is("ended_at", null)
-    .order("started_at", { ascending: false });
+    .in("status", ["active", "paused"]);
 
-  for (const row of (open ?? []) as { id: string; started_at: string }[]) {
-    const started = new Date(row.started_at).getTime();
-    const clamped = Math.max(0, Math.min(Math.round((Date.now() - started) / 1000), 12 * 3600));
-    await supabase
-      .from("study_sessions")
-      .update({ ended_at: new Date().toISOString(), duration_seconds: clamped })
-      .eq("id", row.id)
-      .eq("user_id", userId);
+  for (const row of (open ?? []) as { id: string; status: string; started_at: string; paused_seconds: number; last_resumed_at: string | null }[]) {
+    await forceClose(supabase, userId, row, "abandoned");
   }
 
+  const nowIso = new Date().toISOString();
   const { data, error } = await supabase
     .from("study_sessions")
-    .insert({ user_id: userId, day_key: dayKeyFor(profile.timezone) })
+    .insert({
+      user_id: userId,
+      day_key: dayKeyFor(profile.timezone),
+      status: "active",
+      last_resumed_at: nowIso,
+    })
     .select("id")
     .single();
 
   if (error || !data) return { ok: false, error: "Could not start the session. Try again in a moment." };
 
-  for (const p of SESSION_PATHS) revalidatePath(p);
+  revalidateAll();
   return { ok: true, sessionId: String((data as { id: string }).id) };
 }
 
+/** ACTIVE → PAUSED: bank the active stretch into paused_seconds. */
+export async function pauseSession(sessionId: string): Promise<ActionResult> {
+  const { supabase, userId } = await requireUser();
+  if (!userId) return { ok: false, error: "Your session expired — sign in again." };
+
+  const { data: row } = await supabase
+    .from("study_sessions")
+    .select("id, status, started_at, paused_seconds, last_resumed_at")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const session = row as { id: string; status: string; started_at: string; paused_seconds: number; last_resumed_at: string | null } | null;
+
+  if (!session) return { ok: false, error: "Session not found." };
+  if (session.status === "paused") return { ok: true }; // idempotent
+  if (session.status !== "active") return { ok: false, error: "Session is not running." };
+
+  // Bank the active stretch, then park the pause MOMENT in last_resumed_at
+  // so the frozen elapsed time stays computable from DB fields alone.
+  const since = session.last_resumed_at
+    ? Math.round((Date.now() - new Date(session.last_resumed_at).getTime()) / 1000)
+    : 0;
+  const banked = Math.max(0, Math.min(since, MAX_SESSION_SECONDS));
+  const { error } = await supabase
+    .from("study_sessions")
+    .update({
+      status: "paused",
+      paused_seconds: session.paused_seconds + banked,
+      last_resumed_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: "Could not pause the session." };
+
+  revalidateAll();
+  return { ok: true };
+}
+
+/** PAUSED → ACTIVE: set the resume marker. */
+export async function resumeSession(sessionId: string): Promise<ActionResult> {
+  const { supabase, userId } = await requireUser();
+  if (!userId) return { ok: false, error: "Your session expired — sign in again." };
+
+  const { data: row } = await supabase
+    .from("study_sessions")
+    .select("id, status")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const session = row as { id: string; status: string } | null;
+
+  if (!session) return { ok: false, error: "Session not found." };
+  if (session.status === "active") return { ok: true }; // idempotent
+  if (session.status !== "paused") return { ok: false, error: "Only a paused session can resume." };
+
+  const { error } = await supabase
+    .from("study_sessions")
+    .update({ status: "active", last_resumed_at: new Date().toISOString() })
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: "Could not resume the session." };
+
+  revalidateAll();
+  return { ok: true };
+}
+
 /**
- * End the running session: persist duration, tallies and optional notes.
- * The client's elapsed seconds are clamped to the real wall-clock window
- * between started_at and now, so the logged time can never exceed reality.
+ * End the session (completed or abandoned). Duration = wall clock since
+ * start, minus banked pause time — all from DB timestamps, so a client
+ * can't inflate it. Task tallies come from the day's task rows.
  */
 export async function endSession(input: {
   sessionId: string;
-  elapsedSeconds: number;
+  status?: "completed" | "abandoned";
   notes?: string;
 }): Promise<ActionResult> {
   const { supabase, userId } = await requireUser();
   if (!userId) return { ok: false, error: "Your session expired — sign in again." };
 
-  const { data: existing } = await supabase
+  const { data: row } = await supabase
     .from("study_sessions")
-    .select("started_at, ended_at")
+    .select("id, status, started_at, paused_seconds, last_resumed_at, duration_seconds, day_key, notes")
     .eq("id", input.sessionId)
     .eq("user_id", userId)
     .maybeSingle();
+  const session = row as
+    | { id: string; status: string; started_at: string; paused_seconds: number; last_resumed_at: string | null; duration_seconds: number | null; day_key: string; notes: string | null }
+    | null;
 
-  if (!existing) return { ok: false, error: "Session not found." };
-  if (existing.ended_at) return { ok: true }; // already closed — idempotent
+  if (!session) return { ok: false, error: "Session not found." };
+  if (session.status === "completed" || session.status === "abandoned") return { ok: true }; // idempotent
 
-  const startedMs = new Date(existing.started_at).getTime();
-  const windowSeconds = Math.max(0, Math.round((Date.now() - startedMs) / 1000));
-  const requested = Number.isFinite(input.elapsedSeconds) ? Math.max(0, Math.round(input.elapsedSeconds)) : 0;
-  const duration = Math.min(requested, windowSeconds, 12 * 3600);
+  // Shared math with the client timer — display and persisted time agree.
+  const duration = elapsedSeconds(session, Date.now());
 
-  // Task tallies for this day (done/skipped), computed server-side.
-  const profile = await getProfile();
-  const dayKey = profile ? dayKeyFor(profile.timezone) : null;
+  // Task tallies for the session's day, computed server-side.
   let tasksDone = 0;
   let tasksSkipped = 0;
-  if (dayKey) {
+  if (session.day_key) {
     const { data: tasks } = await supabase
       .from("daily_tasks")
       .select("status")
       .eq("user_id", userId)
-      .eq("day_key", dayKey);
+      .eq("day_key", session.day_key);
     for (const t of (tasks ?? []) as { status: string }[]) {
-      if (t.status === "done") tasksDone += 1;
+      if (t.status === "completed") tasksDone += 1;
       else if (t.status === "skipped") tasksSkipped += 1;
     }
   }
@@ -125,17 +203,20 @@ export async function endSession(input: {
   const { error } = await supabase
     .from("study_sessions")
     .update({
+      status: input.status ?? "completed",
       ended_at: new Date().toISOString(),
       duration_seconds: duration,
       tasks_done: tasksDone,
       tasks_skipped: tasksSkipped,
-      notes: input.notes?.trim() ? input.notes.trim().slice(0, 2000) : null,
+      notes: input.notes?.trim()
+        ? input.notes.trim().slice(0, 2000)
+        : session.notes,
     })
     .eq("id", input.sessionId)
     .eq("user_id", userId);
 
-  if (error) return { ok: false, error: "Could not save the session. Try again in a moment." };
+  if (error) return { ok: false, error: "Could not save the session." };
 
-  for (const p of SESSION_PATHS) revalidatePath(p);
+  revalidateAll();
   return { ok: true };
 }

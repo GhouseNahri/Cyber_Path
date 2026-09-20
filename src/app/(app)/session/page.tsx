@@ -8,14 +8,12 @@ export const metadata = { title: "Session" };
 
 export default async function SessionPage() {
   const profile = await getProfile();
-  const [missionState] = await Promise.all([getMissionState()]);
+  const missionState = await getMissionState();
 
   return (
     <div className="space-y-6">
       <section aria-labelledby="session-heading">
-        <p className="text-[13px] font-medium uppercase tracking-[0.16em] text-ink-medium">
-          Daily session
-        </p>
+        <p className="text-[13px] font-medium uppercase tracking-[0.16em] text-ink-medium">Daily session</p>
         <h1 id="session-heading" className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
           Today&apos;s <span className="text-gradient">mission</span>
         </h1>
@@ -26,18 +24,25 @@ export default async function SessionPage() {
           <CardHeader title="Can't load today's mission" subtitle="Database migrations not applied yet" />
           <EmptyState
             title="Migrations 0003 and 0006 aren't run yet"
-            body="Today's mission is generated from your real roadmap. Run the SQL files (0003, 0006) in the Supabase SQL Editor and reload."
+            body="Today's mission is generated from your real roadmap. Apply the SQL migrations and reload."
           />
         </Card>
       ) : (
         <>
+          {missionState.session && missionState.session.status === "paused" ? (
+            <div className="rounded-xl border border-warn/40 bg-warn/[0.08] px-4 py-3 text-sm text-ink-high">
+              <span className="font-semibold">Session paused.</span>{" "}
+              Your time is frozen — resume when ready. Nothing is lost.
+            </div>
+          ) : null}
           <TaskRunner
             mission={missionState.mission}
             session={missionState.session}
             goalMinutes={profile?.daily_goal_minutes ?? 45}
           />
           <p className="text-[13px] text-ink-medium">
-            New tasks land at local midnight in {profile?.timezone ?? "UTC"} — your day, your clock.
+            New tasks land at local midnight in {profile?.timezone ?? "UTC"} — your day, your clock. Skipped tasks keep
+            their reason on record.
           </p>
         </>
       )}

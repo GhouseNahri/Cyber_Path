@@ -70,8 +70,12 @@ export default async function DashboardPage() {
         <Card glow>
           <CardHeader
             title="Today's mission"
-            subtitle="Generated from your roadmap position — in-progress first, sized to your goal"
-            action={<Badge tone="accent">{missionState.mission.remainingMinutes} min left</Badge>}
+            subtitle="Review → in-progress → fresh topics, sized to your goal"
+            action={
+              <Badge tone={missionState.mission.settled ? "ok" : "accent"}>
+                {missionState.mission.settled ? "settled" : `${missionState.mission.remainingMinutes} min left`}
+              </Badge>
+            }
           />
           <ol className="space-y-3">
             {missionState.mission.tasks.map((t, i) => (
@@ -85,8 +89,8 @@ export default async function DashboardPage() {
                       {TASK_KIND_META[t.kind].label} · {titleBySlug.get(t.topic_slug) ?? t.topic_slug.replaceAll("-", " ")} · ~{t.planned_minutes} min
                     </p>
                   </div>
-                  <Badge tone={t.status === "done" ? "ok" : t.status === "skipped" ? "neutral" : "info"}>
-                    {t.status === "done" ? "Done" : t.status === "skipped" ? "Skipped" : "To do"}
+                  <Badge tone={t.status === "completed" ? "ok" : t.status === "skipped" ? "neutral" : t.status === "in_progress" ? "accent" : "info"}>
+                    {t.status === "completed" ? "Done" : t.status === "skipped" ? "Skipped" : t.status === "in_progress" ? "Current" : "To do"}
                   </Badge>
                 </div>
               </li>
@@ -94,15 +98,20 @@ export default async function DashboardPage() {
           </ol>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="font-mono text-[11px] text-ink-low">
-              {missionState.mission.tasks.filter((t) => t.status === "done").length}/{missionState.mission.tasks.length} tasks complete
+              {missionState.mission.tasks.filter((t) => t.status === "completed").length}/{missionState.mission.tasks.length} tasks complete
             </p>
-            <Link href="/session" className={buttonClasses({ variant: "primary", size: "sm" })}>
-              {missionState.mission.settled
-                ? "Session summary"
-                : missionState.session && !missionState.session.ended_at
-                  ? "Continue session"
+            <div className="flex items-center gap-2">
+              <Link href="/session" className={buttonClasses({ variant: "primary", size: "sm" })}>
+                {missionState.session && (missionState.session.status === "active" || missionState.session.status === "paused")
+                  ? missionState.session.status === "paused"
+                    ? "Resume session"
+                    : "Continue session"
                   : "Start session"}
-            </Link>
+              </Link>
+              <Link href="/history" className={buttonClasses({ variant: "secondary", size: "sm" })}>
+                History
+              </Link>
+            </div>
           </div>
         </Card>
       ) : null}
