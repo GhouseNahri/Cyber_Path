@@ -4,8 +4,12 @@ import { isSupabaseConfigured, SUPABASE_ANON_KEY, SUPABASE_URL } from "./config"
 
 const PUBLIC_PATHS = new Set(["/login", "/signup", "/forgot-password", "/reset-password"]);
 
+/** Prefix-based public routes — the shareable portfolio is public by design. */
+const PUBLIC_PREFIXES = ["/portfolio/"];
+
 export function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.has(pathname);
+  if (PUBLIC_PATHS.has(pathname)) return true;
+  return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p) && pathname.length > p.length);
 }
 
 /** Refreshes the Supabase session cookie on every match and enforces the

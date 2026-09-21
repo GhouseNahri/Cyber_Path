@@ -104,6 +104,18 @@ export const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    label: "GitHub",
+    href: "/github",
+    phase: 14,
+    description: "Connect GitHub, link repos, publish portfolio",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
+        <rect x="3.5" y="7.5" width="17" height="12" rx="2" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5M3.5 12.5h17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     label: "Analytics",
     href: "/analytics",
     phase: 12,
