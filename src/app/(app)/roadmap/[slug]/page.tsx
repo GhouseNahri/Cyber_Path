@@ -8,6 +8,8 @@ import { getTopicNote, getBookmarkedSlugs } from "@/lib/notes/queries";
 import { ResourceList } from "@/components/resources/ResourceList";
 import { TopicNotes } from "@/components/notes/TopicNotes";
 import { BookmarkButton } from "@/components/notes/BookmarkButton";
+import { QuizCard } from "@/components/quiz/QuizCard";
+import { getQuizForTopic } from "@/lib/quiz/queries";
 import { StageTracker } from "./StageTracker";
 
 export const metadata = { title: "Topic" };
@@ -25,10 +27,11 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
 
   const { topic, phase, resources, skills } = detail;
   const hints = topic.stage_hints as Partial<Record<string, string>>;
-  const [statusMap, note, bookmarks] = await Promise.all([
+  const [statusMap, note, bookmarks, quiz] = await Promise.all([
     getResourceStatusesForTopic(slug),
     getTopicNote(slug),
     getBookmarkedSlugs(),
+    getQuizForTopic(slug),
   ]);
   const resourceItems: ResourceItem[] = resources.map((r) => ({
     ...r,
@@ -104,6 +107,29 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
                 )}
               </div>
             ) : null}
+          </Card>
+
+          {/* ── Knowledge check ────────────────────────────────────── */}
+          <Card>
+            <CardHeader
+              title="Knowledge check"
+              subtitle="Scenario-first questions — prove it, don't recall it. Score is computed server-side."
+              action={quiz.ok && quiz.hasQuiz && quiz.passed ? <Badge tone="ok">passed</Badge> : null}
+            />
+            {quiz.ok && quiz.hasQuiz ? (
+              <QuizCard
+                topicSlug={topic.slug}
+                questions={quiz.questions}
+                attempts={quiz.attempts}
+                bestPct={quiz.bestPct}
+                passed={quiz.passed}
+              />
+            ) : (
+              <EmptyState
+                title="No quiz for this topic yet"
+                body="Knowledge checks roll out per topic. The Test stage still counts through daily tasks and self-assessment."
+              />
+            )}
           </Card>
 
           {/* ── My notes ───────────────────────────────────────────── */}
