@@ -19,6 +19,12 @@ function SkillCard({ skill }: { skill: SkillView }) {
           <p className="text-sm font-semibold text-ink-high">{skill.name}</p>
           <p className="mt-0.5 text-[12px] text-ink-low">
             {skill.topics_completed}/{skill.topics_mapped} topics completed
+            {skill.projects_completed > 0 ? (
+              <>
+                {' '}
+                · <span className="text-ok">{skill.projects_completed} project{skill.projects_completed === 1 ? "" : "s"} demonstrated</span>
+              </>
+            ) : null}
           </p>
         </div>
         <Badge tone={LEVEL_TONE[skill.level]}>{LEVEL_LABEL[skill.level]}</Badge>
