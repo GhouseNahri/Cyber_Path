@@ -94,7 +94,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Career",
     href: "/career",
-    phase: 11,
+    phase: 13,
     description: "Explore cybersecurity career paths",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
