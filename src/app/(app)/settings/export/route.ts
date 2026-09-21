@@ -17,7 +17,7 @@ export async function GET() {
   }
 
   const uid = user.id;
-  const [profile, progress, tasks, sessions, missed, notes, bookmarks, resourceStatus] = await Promise.all([
+  const [profile, progress, tasks, sessions, missed, notes, bookmarks, resourceStatus, reviews, projects] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
     supabase.from("user_topic_progress").select("*").eq("user_id", uid),
     supabase.from("daily_tasks").select("*").eq("user_id", uid),
@@ -26,9 +26,11 @@ export async function GET() {
     supabase.from("topic_notes").select("*").eq("user_id", uid),
     supabase.from("user_topic_bookmarks").select("*").eq("user_id", uid),
     supabase.from("user_resource_status").select("*").eq("user_id", uid),
+    supabase.from("topic_reviews").select("*").eq("user_id", uid),
+    supabase.from("user_projects").select("*").eq("user_id", uid),
   ]);
 
-  const errors = [profile.error, progress.error, tasks.error, sessions.error, missed.error, notes.error, bookmarks.error, resourceStatus.error]
+  const errors = [profile.error, progress.error, tasks.error, sessions.error, missed.error, notes.error, bookmarks.error, resourceStatus.error, reviews.error, projects.error]
     .filter(Boolean)
     .length;
   if (errors > 0) {
@@ -47,6 +49,8 @@ export async function GET() {
     topic_notes: notes.data ?? [],
     topic_bookmarks: bookmarks.data ?? [],
     resource_statuses: resourceStatus.data ?? [],
+    topic_reviews: reviews.data ?? [],
+    projects: projects.data ?? [],
   };
 
   const date = new Date().toISOString().slice(0, 10);

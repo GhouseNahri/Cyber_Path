@@ -12,6 +12,8 @@ export type SkillView = {
   theoryPct: number;
   /** Weighted share of mapped topics with practice/build stages done (0–100). */
   practicalPct: number;
+  /** Completed or published projects mapped to this skill. */
+  projects_completed: number;
   topics_mapped: number;
   topics_completed: number;
 };
@@ -33,14 +35,18 @@ export type SkillsOverview =
 export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
   const supabase = await createClient();
 
-  const [linksRes, skillsRes, progressRes] = await Promise.all([
+  const [linksRes, skillsRes, progressRes, projectsRes] = await Promise.all([
     supabase.from("topic_skills").select("topic_slug, skill_slug, weight"),
     supabase.from("skills").select("slug, name, category").order("category").order("name"),
     supabase.from("user_topic_progress").select("topic_slug, status, stages, confidence"),
+    supabase
+      .from("user_projects")
+      .select("idea_slug, project_ideas ( skills )")
+      .in("status", ["completed", "published"]),
   ]);
 
   if (skillsRes.error) return { ok: false, missingSchema: true };
-  if (linksRes.error || progressRes.error) return { ok: false, missingSchema: true };
+  if (linksRes.error || progressRes.error || projectsRes.error) return { ok: false, missingSchema: true };
 
   type Link = { topic_slug: string; skill_slug: string; weight: number };
   type Prog = { topic_slug: string; status: string; stages: Record<string, unknown>; confidence: number | null };
@@ -50,6 +56,19 @@ export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
   const progressRows = (progressRes.data ?? []) as unknown as Prog[];
 
   const progByTopic = new Map(progressRows.map((p) => [p.topic_slug, p]));
+
+  // Project evidence: count completed/published projects per skill slug.
+  const projectsBySkill = new Map<string, number>();
+  for (const row of (projectsRes.data ?? []) as unknown as { idea_slug: string | null; project_ideas: { skills: unknown } | { skills: unknown }[] | null }[]) {
+    const idea = Array.isArray(row.project_ideas) ? row.project_ideas[0] : row.project_ideas;
+    const skillList = idea?.skills;
+    if (!Array.isArray(skillList)) continue;
+    for (const s of skillList) {
+      if (typeof s !== "string") continue;
+      projectsBySkill.set(s, (projectsBySkill.get(s) ?? 0) + 1);
+    }
+  }
+
   const views: SkillView[] = skills.map((skill) => {
     const mine = links.filter((l) => l.skill_slug === skill.slug);
     const totalWeight = mine.reduce((sum, l) => sum + Number(l.weight), 0);
@@ -81,11 +100,13 @@ export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
     const theoryPct = totalWeight > 0 ? Math.round((doneWeight / totalWeight) * 100) : 0;
     const practicalPct = totalWeight > 0 ? Math.round((practicalWeight / totalWeight) * 100) : 0;
 
+    const projectCount = projectsBySkill.get(skill.slug) ?? 0;
+
     let level: SkillLevel = "not_started";
-    if (completed > 0 || inProgress > 0) {
-      if (completed === 0) level = "learning";
+    if (completed > 0 || inProgress > 0 || projectCount > 0) {
+      if (completed === 0 && projectCount === 0) level = "learning";
       else if (completed < 2 || practiced === 0) level = "practicing";
-      else if (confident === 0) level = "competent";
+      else if (confident === 0 && projectCount === 0) level = "competent";
       else level = "demonstrated";
     }
 
@@ -96,6 +117,7 @@ export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
       level,
       theoryPct,
       practicalPct,
+      projects_completed: projectCount,
       topics_mapped: mine.length,
       topics_completed: completed,
     };

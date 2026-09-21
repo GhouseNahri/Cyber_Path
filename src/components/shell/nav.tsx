@@ -82,7 +82,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Projects",
     href: "/projects",
-    phase: 10,
+    phase: 11,
     description: "Build and track security projects",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
