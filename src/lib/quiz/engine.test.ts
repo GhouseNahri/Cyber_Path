@@ -33,13 +33,15 @@ describe("validateAnswers", () => {
     expect(validateAnswers(["a", null, "c"], 3, sets)).toEqual(["a", null, "c"]);
     expect(validateAnswers([null, null, null], 3, sets)).toEqual([null, null, null]);
   });
+  it("allows the same id on different questions (ids are per-question local)", () => {
+    expect(validateAnswers(["a", "yes", "a"], 3, sets)).toEqual(["a", "yes", "a"]);
+  });
   it("treats undefined entries as unanswered", () => {
     expect(validateAnswers(["a", undefined, "b"], 3, sets)).toEqual(["a", null, "b"]);
   });
-  it("rejects wrong length, foreign ids, duplicates, non-strings", () => {
+  it("rejects wrong length, foreign ids, non-strings", () => {
     expect(validateAnswers(["a"], 3, sets)).toBeNull();
     expect(validateAnswers(["a", "yes", "z"], 3, sets)).toBeNull();
-    expect(validateAnswers(["a", "yes", "a"], 3, sets)).toBeNull();
     expect(validateAnswers([1, "yes", "c"], 3, sets)).toBeNull();
     expect(validateAnswers("a,yes,c", 3, sets)).toBeNull();
   });

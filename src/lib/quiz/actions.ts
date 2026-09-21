@@ -50,7 +50,7 @@ export async function submitQuizAttempt(topicSlug: string, answers: unknown): Pr
   // Load questions WITH the answer key (server-side only).
   const qRes = await supabase
     .from("quiz_questions")
-    .select("position, kind, question, choices, answer_index")
+    .select("position, kind, question, choices, answer_index, explanation")
     .eq("topic_slug", topicSlug)
     .order("position");
 

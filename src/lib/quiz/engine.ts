@@ -42,8 +42,10 @@ export function pctPasses(scorePct: number): boolean {
 /**
  * Validate a submitted answers payload: an array of choice ids (or null),
  * same length as the questions, each id either null or present among that
- * question's choices, no duplicates. Returns null when the payload is
- * malformed — the action then rejects rather than guesses.
+ * question's choices. Choice ids are per-question local, so the SAME id may
+ * legitimately appear on different questions — only membership matters.
+ * Returns null when the payload is malformed; the action then rejects
+ * rather than guesses.
  */
 export function validateAnswers(
   answers: unknown,
@@ -52,7 +54,6 @@ export function validateAnswers(
 ): (string | null)[] | null {
   if (!Array.isArray(answers) || answers.length !== questionCount) return null;
   const out: (string | null)[] = [];
-  const seen = new Set<string>();
   for (let i = 0; i < answers.length; i++) {
     const a = answers[i];
     if (a === null || a === undefined) {
@@ -60,8 +61,6 @@ export function validateAnswers(
       continue;
     }
     if (typeof a !== "string") return null;
-    if (seen.has(a)) return null; // same choice picked twice
-    seen.add(a);
     if (!choiceIdSets[i]?.has(a)) return null; // id not among the choices
     out.push(a);
   }
