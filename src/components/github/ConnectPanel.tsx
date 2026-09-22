@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Badge, Button } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { disconnectGithub, saveGithubConnection, setPortfolioPublic } from "@/lib/github/actions";
@@ -16,6 +16,23 @@ export function ConnectPanel({ connection, portfolioPublic, username }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(portfolioPublic);
+
+  // Surface OAuth errors Supabase appends to the redirect (?error=…).
+  // Read once at first render (lazy state — no effect-setState), then the
+  // effect only cleans the address bar. Without this the failed round-trip
+  // looked like "Connect does nothing".
+  const [oauthError] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const e = params.get("error_description") ?? params.get("error");
+    return e ? `GitHub authorization did not complete: ${e.slice(0, 200)}` : null;
+  });
+
+  useEffect(() => {
+    if (oauthError && window.location.search) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [oauthError]);
 
   /** Step 1: open GitHub consent (Supabase OAuth). The page navigates away
    *  and returns with ?… ; the token is then captured server-side. */
@@ -112,9 +129,9 @@ export function ConnectPanel({ connection, portfolioPublic, username }: Props) {
           {notice}
         </p>
       ) : null}
-      {error ? (
+      {(error ?? oauthError) ? (
         <p role="alert" className="rounded-lg border border-danger/30 bg-danger/[0.07] px-3 py-2 text-[13px] text-danger">
-          {error}
+          {error ?? oauthError}
         </p>
       ) : null}
     </div>

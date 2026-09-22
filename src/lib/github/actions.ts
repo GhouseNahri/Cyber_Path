@@ -28,9 +28,40 @@ export async function saveGithubConnection(): Promise<GithubActionResult> {
   const { data: sessionData } = await supabase.auth.getSession();
   const providerToken = sessionData.session?.provider_token;
 
-  // The identity row for GitHub.
+  // The identity row for GitHub. Note: Supabase stores GitHub's id under
+  // `sub`/`provider_id` and the login under `user_name` — parseGithubUser
+  // handles both shapes.
   const identity = user.identities?.find((i) => i.provider === "github");
-  const githubUser = parseGithubUser((identity?.identity_data ?? {}) as Record<string, unknown>);
+  let githubUser = parseGithubUser((identity?.identity_data ?? {}) as Record<string, unknown>);
+
+  // The stored token is the source of truth we will actually use later, so
+  // verify it and prefer the authoritative API values when it works.
+  if (providerToken) {
+    try {
+      const res = await fetch("https://api.github.com/user", {
+        headers: {
+          Authorization: `Bearer ${providerToken}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "Cyber_Path",
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) {
+        const gh = (await res.json()) as { id?: unknown; login?: unknown };
+        const apiUser = parseGithubUser(gh as Record<string, unknown>);
+        if (apiUser) githubUser = apiUser;
+      }
+    } catch {
+      // Network hiccup — fall back to the identity row below.
+    }
+  }
+
+  if (!githubUser && !providerToken) {
+    return {
+      ok: false,
+      error: "No GitHub token in the session. Click Connect GitHub, approve access, then finish connecting right away.",
+    };
+  }
   if (!githubUser) {
     return { ok: false, error: "GitHub identity not found on your account. Connect GitHub first." };
   }
@@ -41,9 +72,8 @@ export async function saveGithubConnection(): Promise<GithubActionResult> {
     };
   }
 
-  const scopes = typeof sessionData.session?.provider_refresh_token === "string"
-    ? []
-    : []; // Supabase does not surface scopes reliably; store empty, harmless.
+  // Supabase does not surface the granted scopes reliably; stored empty.
+  const scopes: string[] = [];
 
   const { error } = await supabase.from("github_connections").upsert(
     {

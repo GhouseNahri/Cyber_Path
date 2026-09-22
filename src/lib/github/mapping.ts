@@ -104,12 +104,22 @@ export function sortRepos(repos: GithubRepoLite[]): GithubRepoLite[] {
   });
 }
 
-/** Parse the GitHub user row returned by the provider during OAuth. */
+/** Parse the GitHub user row returned by the provider during OAuth.
+ *  Supabase's identity_data for GitHub carries `sub`/`provider_id` (numeric
+ *  strings) and `user_name` rather than the API's `id`/`login` — all accepted. */
 export function parseGithubUser(
   raw: Record<string, unknown> | null | undefined,
 ): { id: number; login: string } | null {
-  const id = raw?.id;
-  const login = raw?.login;
-  if (typeof id !== "number" || typeof login !== "string" || login.length === 0) return null;
+  if (!raw) return null;
+  const rawId = raw.id ?? raw.sub ?? raw.provider_id;
+  const id =
+    typeof rawId === "number"
+      ? rawId
+      : typeof rawId === "string" && /^\d+$/.test(rawId)
+        ? Number(rawId)
+        : Number.NaN;
+  const loginRaw = raw.login ?? raw.user_name ?? raw.preferred_username;
+  const login = typeof loginRaw === "string" ? loginRaw.trim() : "";
+  if (!Number.isFinite(id) || id <= 0 || login.length === 0) return null;
   return { id, login: login.slice(0, 100) };
 }

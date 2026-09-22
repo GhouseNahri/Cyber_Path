@@ -73,9 +73,23 @@ describe("parseGithubUser", () => {
   it("parses a valid user row", () => {
     expect(parseGithubUser({ id: 42, login: "ghouse" })).toEqual({ id: 42, login: "ghouse" });
   });
+  it("parses Supabase identity_data shape (sub + user_name)", () => {
+    expect(parseGithubUser({ sub: "5054711", user_name: "GhouseNahri" })).toEqual({
+      id: 5054711,
+      login: "GhouseNahri",
+    });
+  });
+  it("parses provider_id / preferred_username variants", () => {
+    expect(parseGithubUser({ provider_id: "99", preferred_username: "octo" })).toEqual({
+      id: 99,
+      login: "octo",
+    });
+  });
   it("rejects malformed rows", () => {
     expect(parseGithubUser(null)).toBeNull();
     expect(parseGithubUser({ id: "x", login: "y" })).toBeNull();
     expect(parseGithubUser({ id: 1, login: "" })).toBeNull();
+    expect(parseGithubUser({ sub: "not-a-number", user_name: "x" })).toBeNull();
+    expect(parseGithubUser({ sub: "-5", user_name: "x" })).toBeNull();
   });
 });
