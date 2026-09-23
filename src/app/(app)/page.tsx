@@ -13,6 +13,8 @@ import { StreakCard, MissedDayPrompt } from "@/components/streak";
 import { yesterdayKey } from "@/lib/streak/messages";
 import { getRevisionQueue } from "@/lib/revision/queries";
 import { RevisionQueueCard } from "@/components/revision/RevisionQueueCard";
+import { getRecommendations } from "@/lib/recommend/queries";
+import type { Recommendation, RecKind } from "@/lib/recommend/engine";
 
 export default async function DashboardPage() {
   const profile = await getProfile();
@@ -38,6 +40,7 @@ export default async function DashboardPage() {
   const studyTotals = await getStudyTotals();
   const streakData = await getStreakData();
   const revisionData = await getRevisionQueue();
+  const recData = await getRecommendations();
 
   // Post-mission completion line — only when today is already qualified.
   const completion =
@@ -185,51 +188,15 @@ export default async function DashboardPage() {
                 </Link>
               }
             />
-          ) : totals && totals.completed === 0 && totals.in_progress === 0 ? (
-            <div>
-              <p className="text-sm leading-relaxed text-ink-medium">
-                You haven&apos;t started yet. The cleanest opening move:
-              </p>
-              {nextTopic ? (
-                <div className="mt-3 rounded-xl border border-accent/40 bg-accent/[0.07] p-4">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-low">Start here</p>
-                  <p className="mt-1 font-display text-lg font-semibold">{nextTopic.title}</p>
-                  <p className="mt-1 text-[13px] leading-relaxed text-ink-medium">{nextTopic.summary}</p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Link href={`/roadmap/${nextTopic.slug}`} className={buttonClasses({ variant: "primary", size: "sm" })}>
-                      Open topic
-                    </Link>
-                    <span className="font-mono text-[11px] text-ink-low">~{nextTopic.estimated_minutes} min</span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : nextTopic ? (
-            <div>
-              <p className="text-sm leading-relaxed text-ink-medium">
-                {totals && totals.in_progress > 0
-                  ? `You have ${totals.in_progress} topic${totals.in_progress === 1 ? "" : "s"} in progress. Continue here:`
-                  : "Next unlocked topic on your path:"}
-              </p>
-              <div className="mt-3 rounded-xl border border-accent/40 bg-accent/[0.07] p-4">
-                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-low">Up next</p>
-                <p className="mt-1 font-display text-lg font-semibold">{nextTopic.title}</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-medium">{nextTopic.summary}</p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Link href={`/roadmap/${nextTopic.slug}`} className={buttonClasses({ variant: "primary", size: "sm" })}>
-                    Continue topic
-                  </Link>
-                  <span className="font-mono text-[11px] text-ink-low">
-                    {STAGE_ORDER.filter((s) => nextTopic.progress.stages[s]).length}/4 stages done · ~{nextTopic.estimated_minutes} min
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
+          ) : !recData.ok ? (
+            <NaiveNextCard nextTopic={nextTopic} />
+          ) : recData.recs.length === 0 ? (
             <EmptyState
               title="Phases 0–4 complete"
               body="You've finished everything seeded so far. Security Fundamentals, Cryptography and the Web phases arrive in the next content drop."
             />
+          ) : (
+            <RecommendationList recs={recData.recs} />
           )}
         </Card>
 
@@ -296,6 +263,86 @@ export default async function DashboardPage() {
           <CardHeader title="Skill snapshot" subtitle="Theory vs practice, kept separate" />
           <SkillSnapshot />
         </Card>
+      </div>
+    </div>
+  );
+}
+
+/** Rank badge tone per recommendation kind. */
+const KIND_META: Record<RecKind, { label: string; tone: "accent" | "warn" | "info" | "ok" }> = {
+  due_revision: { label: "Revision due", tone: "warn" },
+  career_next: { label: "Career path", tone: "accent" },
+  continue_topic: { label: "In progress", tone: "info" },
+  start_topic: { label: "Up next", tone: "info" },
+  low_confidence_review: { label: "Confidence check", tone: "warn" },
+  weak_quiz_retest: { label: "Retest", tone: "warn" },
+  smaller_target: { label: "Target", tone: "ok" },
+};
+
+/** Ranked recommendations with their evidence lines. */
+function RecommendationList({ recs }: { recs: Recommendation[] }) {
+  const [top, ...alternates] = recs;
+  if (!top) return null;
+  return (
+    <div>
+      <div className="rounded-xl border border-accent/40 bg-accent/[0.07] p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-low">Do this next</p>
+          <Badge tone={KIND_META[top.kind].tone}>{KIND_META[top.kind].label}</Badge>
+        </div>
+        <p className="mt-1 font-display text-lg font-semibold">{top.title}</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-medium">{top.why}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Link href={top.href} className={buttonClasses({ variant: "primary", size: "sm" })}>
+            Open
+          </Link>
+          {top.estimated_minutes > 0 ? (
+            <span className="font-mono text-[11px] text-ink-low">~{top.estimated_minutes} min</span>
+          ) : null}
+        </div>
+      </div>
+      {alternates.length > 0 ? (
+        <ul className="mt-3 space-y-2">
+          {alternates.slice(0, 2).map((r) => (
+            <li key={`${r.kind}:${r.href}`} className="rounded-xl border border-hairline bg-surface-2/40 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={KIND_META[r.kind].tone}>{KIND_META[r.kind].label}</Badge>
+                <Link href={r.href} className="text-[13px] font-medium text-ink-high hover:text-accent hover:underline">
+                  {r.title}
+                </Link>
+              </div>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-ink-medium">{r.why}</p>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** Fallback when the recommendation feed is unavailable: the old first-unlocked logic. */
+function NaiveNextCard({ nextTopic }: { nextTopic: { slug: string; title: string; summary: string; estimated_minutes: number } | null }) {
+  if (!nextTopic) {
+    return (
+      <EmptyState
+        title="Phases 0–4 complete"
+        body="You've finished everything seeded so far. Security Fundamentals, Cryptography and the Web phases arrive in the next content drop."
+      />
+    );
+  }
+  return (
+    <div>
+      <p className="text-sm leading-relaxed text-ink-medium">Next unlocked topic on your path:</p>
+      <div className="mt-3 rounded-xl border border-accent/40 bg-accent/[0.07] p-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-low">Up next</p>
+        <p className="mt-1 font-display text-lg font-semibold">{nextTopic.title}</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-medium">{nextTopic.summary}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Link href={`/roadmap/${nextTopic.slug}`} className={buttonClasses({ variant: "primary", size: "sm" })}>
+            Open topic
+          </Link>
+          <span className="font-mono text-[11px] text-ink-low">~{nextTopic.estimated_minutes} min</span>
+        </div>
       </div>
     </div>
   );

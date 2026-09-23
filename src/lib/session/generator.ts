@@ -62,6 +62,13 @@ export type ResourceLinkInput = { topic_slug: string; id: string; type: string; 
 /** Cap on revision tasks per mission — the day must still move forward. */
 const MAX_REVISION_TASKS = 2;
 
+/** Stable-partition: career-aligned topics first, order preserved within
+ *  each partition. Identity when the set is empty (default). */
+function careerFirst(topics: TopicView[], careerSet: ReadonlySet<string>): TopicView[] {
+  if (careerSet.size === 0) return topics;
+  return [...topics.filter((t) => careerSet.has(t.slug)), ...topics.filter((t) => !careerSet.has(t.slug))];
+}
+
 /**
  * Build today's mission from real roadmap state.
  *
@@ -80,15 +87,18 @@ export function generateMission(input: {
   yesterdayTaskSignatures?: string[];
   /** Topic slugs with a scheduled revision due today (or overdue). */
   dueRevisionSlugs?: ReadonlySet<string>;
+  /** Slugs from the user's selected career paths (Phase 13) — tie-breaker only. */
+  careerTopicSlugs?: ReadonlySet<string>;
   now?: Date;
 }): GeneratedTask[] {
   const { goalMinutes, timezone, topics, resources, yesterdayTaskSignatures, dueRevisionSlugs } = input;
   const now = input.now ?? new Date();
+  const careerSet = input.careerTopicSlugs ?? new Set<string>();
 
   const candidates = topics.filter((t) => !t.locked && t.progress.status !== "completed");
   const revisionDue = topics.filter((t) => dueRevisionSlugs?.has(t.slug) ?? false).slice(0, MAX_REVISION_TASKS);
-  const inProgress = candidates.filter((t) => t.progress.status === "in_progress");
-  const fresh = candidates.filter((t) => t.progress.status === "not_started");
+  const inProgress = careerFirst(candidates.filter((t) => t.progress.status === "in_progress"), careerSet);
+  const fresh = careerFirst(candidates.filter((t) => t.progress.status === "not_started"), careerSet);
 
   // Signature of a candidate in KIND-space (what daily_tasks stores), so
   // yesterday's rows are directly comparable: topic + its next task kind.

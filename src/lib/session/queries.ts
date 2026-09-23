@@ -161,6 +161,21 @@ export const getMissionState = cache(async (): Promise<MissionState> => {
   // Due spaced revisions (Phase 9) — the generator's top-priority candidates.
   const queue = await getRevisionQueue();
 
+  // Selected career paths (Phase 13) — used only as a generation-time tie-breaker.
+  let careerTopicSlugs: Set<string> | undefined;
+  const selRes = await supabase.from("user_career_paths").select("path_slug").eq("user_id", profile.id);
+  const selSlugs = ((selRes.data ?? []) as { path_slug: string }[]).map((r) => r.path_slug);
+  if (!selRes.error && selSlugs.length > 0) {
+    const pathRes = await supabase.from("career_paths").select("recommended_topics").in("slug", selSlugs);
+    if (!pathRes.error) {
+      careerTopicSlugs = new Set(
+        ((pathRes.data ?? []) as { recommended_topics: unknown }[]).flatMap((r) =>
+          Array.isArray(r.recommended_topics) ? r.recommended_topics.filter((x): x is string => typeof x === "string") : [],
+        ),
+      );
+    }
+  }
+
   const generated = generateMission({
     goalMinutes: profile.daily_goal_minutes ?? 45,
     timezone: profile.timezone,
@@ -173,6 +188,7 @@ export const getMissionState = cache(async (): Promise<MissionState> => {
     })),
     yesterdayTaskSignatures: ((yRows ?? []) as { topic_slug: string; kind: string }[]).map((r) => `${r.topic_slug}:${r.kind}`),
     dueRevisionSlugs: queue.ok ? queue.dueSlugs : undefined,
+    careerTopicSlugs,
   });
 
   if (generated.length === 0) {

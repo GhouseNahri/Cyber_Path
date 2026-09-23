@@ -30,6 +30,29 @@ function topic(overrides: Partial<TopicView> & { slug: string }): TopicView {
 }
 
 describe("generateMission", () => {
+  it("career tie-breaker: aligned topics lead within their band, identity without it", () => {
+    const freshA = topic({ slug: "fresh-a" });
+    const freshB = topic({ slug: "fresh-b" });
+    const freshC = topic({ slug: "fresh-c" });
+
+    const withCareer = generateMission({
+      goalMinutes: 45,
+      timezone: "UTC",
+      topics: [freshA, freshB, freshC],
+      careerTopicSlugs: new Set(["fresh-c"]),
+    });
+    expect(withCareer[0]?.topic_slug).toBe("fresh-c");
+    expect(withCareer.map((t) => t.topic_slug)).toContain("fresh-a");
+
+    // Same input without the set → original roadmap order.
+    const without = generateMission({
+      goalMinutes: 45,
+      timezone: "UTC",
+      topics: [freshA, freshB, freshC],
+    });
+    expect(without[0]?.topic_slug).toBe("fresh-a");
+  });
+
   it("picks in-progress topics before fresh ones", () => {
     const tasks = generateMission({
       goalMinutes: 45,
