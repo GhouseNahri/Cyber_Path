@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "./nav";
-import { Badge } from "../ui/Badge";
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -41,7 +40,6 @@ export function Sidebar() {
       <nav aria-label="Primary" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {NAV_ITEMS.map((item) => {
           const active = isActive(pathname, item.href);
-          const future = item.phase !== 1;
 
           return (
             <Link
@@ -59,7 +57,6 @@ export function Sidebar() {
                 {item.icon}
               </span>
               <span className="flex-1 truncate font-medium">{item.label}</span>
-              {future && <Badge tone="neutral">P{item.phase}</Badge>}
             </Link>
           );
         })}

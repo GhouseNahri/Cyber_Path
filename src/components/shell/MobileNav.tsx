@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "./nav";
-import { Badge } from "../ui/Badge";
 
 type MobileNavProps = {
   open: boolean;
@@ -78,7 +77,6 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
               >
                 <span className={active ? "text-accent" : "text-ink-low"} aria-hidden="true">{item.icon}</span>
                 <span className="flex-1 font-medium">{item.label}</span>
-                {item.phase !== 1 && <Badge tone="neutral">P{item.phase}</Badge>}
               </Link>
             );
           })}

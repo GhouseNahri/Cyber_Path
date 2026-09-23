@@ -1,10 +1,7 @@
-/** Single source of truth for app navigation. `phase` marks when a section
- *  becomes functional — honest about what exists today. */
+/** Single source of truth for app navigation. */
 export type NavItem = {
   label: string;
   href: string;
-  /** Which build phase activates this section. */
-  phase: number | "later";
   description: string;
   icon: React.ReactNode;
 };
@@ -13,7 +10,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Dashboard",
     href: "/",
-    phase: 1,
     description: "Today's mission, streak and progress overview",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -27,7 +23,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Roadmap",
     href: "/roadmap",
-    phase: 1,
     description: "Phases, topics and prerequisites",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -41,7 +36,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Library",
     href: "/library",
-    phase: 1,
     description: "Curated resources, filterable and trackable",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -54,7 +48,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Skills",
     href: "/skills",
-    phase: 1,
     description: "Skill graph with theory vs practice",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -70,7 +63,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Labs",
     href: "/labs",
-    phase: 8,
     description: "Hands-on lab tracker",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -82,7 +74,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Projects",
     href: "/projects",
-    phase: 11,
     description: "Build and track security projects",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -94,7 +85,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Career",
     href: "/career",
-    phase: 13,
     description: "Explore cybersecurity career paths",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -106,7 +96,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "GitHub",
     href: "/github",
-    phase: 14,
     description: "Connect GitHub, link repos, publish portfolio",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -118,7 +107,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Analytics",
     href: "/analytics",
-    phase: 12,
     description: "Study time, velocity and patterns",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -129,7 +117,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "History",
     href: "/history",
-    phase: 1,
     description: "Past sessions and study calendar",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
@@ -141,7 +128,6 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: "Settings",
     href: "/settings",
-    phase: 2,
     description: "Profile, goals and preferences",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
