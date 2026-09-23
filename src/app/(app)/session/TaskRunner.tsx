@@ -138,7 +138,8 @@ export function TaskRunner({ mission, session, goalMinutes }: Props) {
 
   // ── Session summary view ────────────────────────────────────────────────
   if (session && (session.status === "completed" || session.status === "abandoned")) {
-    const pct = tasks.length > 0 ? Math.round((settledCount / tasks.length) * 100) : 0;
+    // "Of mission" counts only genuinely completed tasks — skipped never inflates it.
+    const pct = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
     return (
       <Card glow>
         <CardHeader

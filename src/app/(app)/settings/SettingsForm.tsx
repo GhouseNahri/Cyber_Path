@@ -150,7 +150,7 @@ export function SettingsForm({ profile, email }: { profile: Profile; email: stri
       <div className="grid gap-4 sm:grid-cols-2">
         <fieldset>
           <legend className="mb-1.5 block text-[13px] font-medium text-ink-high">Preferred study time</legend>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {STUDY_TIMES.map((opt) => (
               <button
                 key={opt.value}
@@ -170,7 +170,7 @@ export function SettingsForm({ profile, email }: { profile: Profile; email: stri
         </fieldset>
         <fieldset>
           <legend className="mb-1.5 block text-[13px] font-medium text-ink-high">Learning style</legend>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {STYLES.map((opt) => (
               <button
                 key={opt.value}
@@ -202,7 +202,7 @@ export function SettingsForm({ profile, email }: { profile: Profile; email: stri
         ) : null}
 
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-xs text-ink-low">{email}</span>
+        <span className="min-w-0 truncate font-mono text-xs text-ink-low">{email}</span>
         <Button type="submit" size="sm" disabled={busy}>
           {busy ? "Saving…" : "Save changes"}
         </Button>

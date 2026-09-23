@@ -115,7 +115,7 @@ export default async function DashboardPage() {
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-low">Yesterday, noted</p>
             <p className="mt-1 text-sm leading-relaxed text-ink-medium">{streakData.missedResponse}</p>
           </section>
-        ) : !streakData.streak.todayQualified ? (
+        ) : !streakData.streak.todayQualified && streakData.streak.totalActiveDays > 0 ? (
           <MissedDayPrompt dayKey={yesterdayKey(streakData.todayKey)} existingReason={null} />
         ) : null)}
 

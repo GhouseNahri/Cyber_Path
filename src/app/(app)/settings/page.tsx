@@ -54,8 +54,8 @@ export default async function SettingsPage() {
               </div>
             </dl>
             <p className="mt-4 rounded-lg border border-hairline bg-surface-2/60 p-3 text-xs leading-relaxed text-ink-medium">
-              Password changes and account deletion arrive with the Phase 16 security pass — they
-              touch auth credentials and deserve careful handling.
+              Password changes and account deletion are coming soon — they touch auth
+              credentials and deserve careful handling.
             </p>
           </Card>
 
