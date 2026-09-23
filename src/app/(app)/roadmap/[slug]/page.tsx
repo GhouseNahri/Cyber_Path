@@ -180,7 +180,7 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
           <Card>
             <CardHeader title="Skills practiced" subtitle="What this topic trains" />
             {skills.length === 0 ? (
-              <p className="text-[13px] text-ink-medium">Mapped in a later phase.</p>
+              <p className="text-[13px] text-ink-medium">No skills are mapped to this topic yet.</p>
             ) : (
               <ul className="flex flex-wrap gap-2">
                 {skills.map((s) => (

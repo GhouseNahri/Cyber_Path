@@ -102,8 +102,8 @@ export default async function CareerPage() {
 
       {selectedCount > 0 ? (
         <p className="text-[12px] text-ink-low">
-          {selectedCount} path{selectedCount === 1 ? "" : "s"} selected — these feed your daily mission
-          recommendations in a later phase.
+          {selectedCount} path{selectedCount === 1 ? "" : "s"} selected — they now shape your daily mission and
+          dashboard recommendations.
         </p>
       ) : null}
     </div>

@@ -10,7 +10,7 @@ export default function LabsPage() {
         <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">Labs</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-medium">
           A tracker for hands-on practice: provider labs, CTFs and home-lab exercises — with
-          notes, evidence and skills demonstrated. Built in Phase 8.
+          notes, evidence and skills demonstrated. Coming soon.
         </p>
       </section>
       <Card>
