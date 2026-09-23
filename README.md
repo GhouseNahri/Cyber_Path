@@ -4,9 +4,10 @@ Personal cybersecurity learning command center — an interactive roadmap that
 turns "watching tutorials" into structured learning: phases, topics,
 prerequisites, real study sessions, streaks, labs, projects and career paths.
 
-> **Status:** Phase 1 — product foundation (design system, app shell,
-> dashboard shell with honest empty states). Authentication, database and the
-> roadmap engine land in later phases; nothing here is simulated.
+> **Status:** Shipped — all 18 build phases complete. Real auth, roadmap,
+> daily sessions, streaks, quizzes, revision, projects, career paths, GitHub
+> portfolio, analytics and a full security audit. See [PRODUCT_REVIEW.md](PRODUCT_REVIEW.md).
+> Nothing here is simulated.
 
 ## Tech stack
 

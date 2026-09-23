@@ -30,3 +30,5 @@ next-env.d.ts
 
 # local dev server logs
 dev-server.log*
+*.log
+*.log.err
