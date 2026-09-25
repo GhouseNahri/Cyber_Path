@@ -41,11 +41,11 @@ Most cybersecurity roadmaps on the internet are static pages: a list of topics, 
 
 - The roadmap is a real dependency graph. Topics stay **locked until their prerequisites are complete**, so you always know what to study next and why.
 - Each topic is broken into stages — **learn → practice → test → build** — so ticking a box never means "I skimmed it".
-- A **daily mission generator** converts your roadmap position into 3–5 concrete tasks with time estimates, and a focused session runner tracks real study time with pause/resume.
+- A **daily mission generator** converts your roadmap position into up to 3 concrete tasks with time estimates, and a focused session runner tracks real study time with pause/resume.
 - **Streaks are honest**: a day only counts when you completed a real task or studied at least 15 minutes. Opening the dashboard earns nothing.
 - Quizzes, spaced revision, skill evidence and career-path coverage are all computed from your actual activity — the app only ever claims what it can prove.
 
-It is designed for one motivated learner (self-hosted, single user per deployment): students starting from fundamentals, career-switchers who want structure, and anyone who wants accountability without gamification tricks.
+Built as a personal learning tool, but technically multi-account: every user's data is isolated by Row Level Security, so a deployment works fine for a study group too. It suits students starting from fundamentals, career-switchers who want structure, and anyone who wants accountability without gamification tricks.
 
 ## Key features
 
@@ -280,7 +280,7 @@ Daily mission (generated from roadmap position + due revisions
                   skill evidence, streaks and analytics
 ```
 
-- **Mission generation is deterministic and explainable** — priority order: due revisions → in-progress topics → next unlocked topic → quiz retests → low-confidence reviews, with career-path alignment as a tie-breaker. Every task carries a "why" line.
+- **Mission generation is deterministic and explainable** — scored priority: due revisions → career-aligned topics → in-progress topics → low-confidence reviews → weak-quiz retests → next unlocked topics (career alignment also tie-breaks task selection). Every task carries a "why" line.
 - **Progress never comes from clicking.** A topic's stages advance only when the corresponding work happens (a passed quiz for *test*, a completed practice session for *practice*).
 - **Recommendations show their evidence** — e.g. "Spaced revision 2 days overdue", "2/4 stages done — the next topic depends on it", "Best quiz score 55% — below the 70% pass line".
 
@@ -308,7 +308,7 @@ Daily mission (generated from roadmap position + due revisions
 ## Skills & practical learning
 
 - 14 skills (Foundations / Systems / Networking / Programming / Security) are mapped from roadmap topics.
-- Skill levels are **evidence-based, five tiers**: `not started → learning → practicing → competent → demonstrated` — derived from completed topic stages (theory), practice tasks, quiz results and finished projects. "Competent" requires completed topics with confidence ≥ 3; there is no level inflation.
+- Skill levels are **evidence-based, five tiers**: `not started → learning → practicing → competent → demonstrated` — derived from completed topics (theory weight), practice/build stages, confidence ratings and finished projects. "Practicing" needs real completed topics; "Competent" needs ≥2 completed topics with practical work and no confident rating yet; "Demonstrated" requires a confidence rating of 4+ or a finished project. There is no level inflation.
 - The app deliberately separates **learning progress** (topics read, quizzes passed) from **demonstrated ability** (finished projects, GitHub repos) — career-path coverage reads both and says which one is missing.
 - **Projects tracker**: 12 seeded project ideas with a status pipeline and GitHub repo links; completing a project strengthens the mapped skills' evidence.
 - The **Labs tracker** (provider labs, CTFs, home-lab exercises with evidence) is planned but **not yet implemented** — the Labs page is an explicit placeholder.
