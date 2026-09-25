@@ -2,10 +2,9 @@ import type { MetadataRoute } from "next";
 
 /** Sitemap of genuinely public surfaces only. Portfolio pages belong here
  *  in principle, but they are opt-in per user and private by default —
- *  so no portfolio URLs are fabricated. Update `base` when the app lands
- *  on a production domain. */
+ *  so no portfolio URLs are fabricated. */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = "http://localhost:3000";
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://cyber-path-phi.vercel.app";
   const now = new Date();
   return [
     { url: `${base}/`, changeFrequency: "weekly" as const, priority: 1, lastModified: now },

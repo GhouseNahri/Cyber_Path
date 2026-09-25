@@ -9,6 +9,8 @@ prerequisites, real study sessions, streaks, labs, projects and career paths.
 > portfolio, analytics and a full security audit. See [PRODUCT_REVIEW.md](PRODUCT_REVIEW.md).
 > Nothing here is simulated.
 
+**Live:** https://cyber-path-phi.vercel.app
+
 ## Tech stack
 
 | Layer | Technology |
