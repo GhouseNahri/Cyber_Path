@@ -59,7 +59,7 @@ All of the following are implemented and working:
 - **Skill engine** — 14 skills tracked across five evidence-based levels (not started → learning → practicing → competent → demonstrated)
 
 **Knowledge & retention**
-- **Quiz engine** — 80 seeded questions across all 27 topics, **scored server-side** (the answer key never reaches the browser), 70% pass line, per-question explanations, full attempt history; passing a quiz auto-sets the topic's Test stage
+- **Quiz engine** — 81 seeded questions across all 27 topics, **scored server-side** (the answer key never reaches the browser), 70% pass line, per-question explanations, full attempt history; passing a quiz auto-sets the topic's Test stage
 - **Spaced revision queue** — completing a topic schedules reviews at 1/3/7/14/30 days (per-user configurable); due reviews feed the dashboard
 - **Weak-topic detection** from quiz scores and low confidence ratings
 
@@ -234,7 +234,7 @@ supabase/migrations/
 ├── 0010_notes_bookmarks.sql       # topic notes + resource bookmarks
 ├── 0011_revision_queue.sql        # spaced-repetition schedule per topic
 ├── 0013_quiz_engine.sql           # quizzes, questions, attempts (server-scored)
-├── 0014_seed_quiz.sql             # 80 questions covering all 27 topics
+├── 0014_seed_quiz.sql             # 81 questions covering all 27 topics
 ├── 0015_projects.sql · 0016_seed_project_ideas.sql   # tracker + 12 ideas
 ├── 0017_career_paths.sql          # 6 role paths + user selections
 └── 0018_github_portfolio.sql      # GitHub connection + public portfolio flag
@@ -295,7 +295,7 @@ Daily mission (generated from roadmap position + due revisions
 ## Quiz & revision system
 
 **Quizzes**
-- Multiple-choice knowledge checks seeded per topic (80 questions across all 27 topics)
+- Multiple-choice knowledge checks seeded per topic (81 questions across all 27 topics)
 - **Scored entirely server-side** — the client submits chosen choice IDs only; the answer key never leaves the database
 - 70% pass line; passing a quiz automatically sets the topic's **Test** stage
 - Every attempt is stored with per-question results and explanations for review; the dashboard surfaces weak topics (best score < 70%) as retest recommendations
