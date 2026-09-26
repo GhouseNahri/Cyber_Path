@@ -23,7 +23,16 @@ export default async function DashboardPage() {
   const today = formatToday(profile?.timezone ?? undefined);
   const goal = profile?.daily_goal_minutes ?? 45;
 
-  const overview = await getRoadmapOverview();
+  // Fire every independent data fetch concurrently — each is a network
+  // round-trip to Supabase, and serial awaits stack their latencies.
+  const [overview, missionState, studyTotals, streakData, revisionData, recData] = await Promise.all([
+    getRoadmapOverview(),
+    getMissionState(),
+    getStudyTotals(),
+    getStreakData(),
+    getRevisionQueue(),
+    getRecommendations(),
+  ]);
   const hasRoadmap = overview.ok;
 
   // Next step: first unlocked, not-completed topic in phase order.
@@ -35,12 +44,6 @@ export default async function DashboardPage() {
 
   const totals = hasRoadmap ? overview.totals : null;
   const roadmapPct = totals && totals.topics > 0 ? Math.round((totals.completed / totals.topics) * 100) : 0;
-
-  const missionState = await getMissionState();
-  const studyTotals = await getStudyTotals();
-  const streakData = await getStreakData();
-  const revisionData = await getRevisionQueue();
-  const recData = await getRecommendations();
 
   // Post-mission completion line — only when today is already qualified.
   const completion =

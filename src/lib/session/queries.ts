@@ -147,23 +147,20 @@ export const getMissionState = cache(async (): Promise<MissionState> => {
 
   // Yesterday's signatures, for no-repeat variety.
   const yesterdayKey = dayKeyRange(dayKey, 2)[0];
-  const { data: yRows } = await supabase
-    .from("daily_tasks")
-    .select("topic_slug, kind")
-    .eq("day_key", yesterdayKey);
 
-  // Top-priority resource per topic for learn-task links.
-  const { data: resRows } = await supabase
-    .from("resources")
-    .select("topic_slug, id, type, priority")
-    .order("priority");
+  // Generation-time inputs: four independent reads, fetched concurrently.
+  const [yRes, resRes, queue, selRes] = await Promise.all([
+    supabase.from("daily_tasks").select("topic_slug, kind").eq("day_key", yesterdayKey),
+    supabase.from("resources").select("topic_slug, id, type, priority").order("priority"),
+    // Due spaced revisions (Phase 9) — the generator's top-priority candidates.
+    getRevisionQueue(),
+    // Selected career paths (Phase 13) — generation-time tie-breaker only.
+    supabase.from("user_career_paths").select("path_slug").eq("user_id", profile.id),
+  ]);
 
-  // Due spaced revisions (Phase 9) — the generator's top-priority candidates.
-  const queue = await getRevisionQueue();
-
-  // Selected career paths (Phase 13) — used only as a generation-time tie-breaker.
+  // Career-path tie-breaker: expand selected path slugs into their
+  // recommended topic slugs (dependent follow-up to the selection read).
   let careerTopicSlugs: Set<string> | undefined;
-  const selRes = await supabase.from("user_career_paths").select("path_slug").eq("user_id", profile.id);
   const selSlugs = ((selRes.data ?? []) as { path_slug: string }[]).map((r) => r.path_slug);
   if (!selRes.error && selSlugs.length > 0) {
     const pathRes = await supabase.from("career_paths").select("recommended_topics").in("slug", selSlugs);
@@ -180,13 +177,13 @@ export const getMissionState = cache(async (): Promise<MissionState> => {
     goalMinutes: profile.daily_goal_minutes ?? 45,
     timezone: profile.timezone,
     topics: allTopics,
-    resources: ((resRows ?? []) as { topic_slug: string; id: string; type: string; priority: number }[]).map((r) => ({
+    resources: ((resRes.data ?? []) as { topic_slug: string; id: string; type: string; priority: number }[]).map((r) => ({
       topic_slug: r.topic_slug,
       id: r.id,
       type: r.type,
       priority: r.priority,
     })),
-    yesterdayTaskSignatures: ((yRows ?? []) as { topic_slug: string; kind: string }[]).map((r) => `${r.topic_slug}:${r.kind}`),
+    yesterdayTaskSignatures: ((yRes.data ?? []) as { topic_slug: string; kind: string }[]).map((r) => `${r.topic_slug}:${r.kind}`),
     dueRevisionSlugs: queue.ok ? queue.dueSlugs : undefined,
     careerTopicSlugs,
   });
