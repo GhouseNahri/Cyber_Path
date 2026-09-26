@@ -356,7 +356,8 @@ Security posture, as implemented and audited:
 
 Deployed on **Vercel**: https://cyber-path-phi.vercel.app
 
-- Framework auto-detected (`next build`); no custom build config required
+- Auto-deploys on every push to `main` (Vercel ↔ GitHub app connection); PRs get preview URLs
+- `vercel.json` pins serverless Functions to `bom1` (Mumbai), co-located with the Supabase `ap-south-1` database — keeps DB round-trips ~10× faster than the default US region
 - The two `NEXT_PUBLIC_SUPABASE_*` variables are set in the Vercel project's environment settings (Production)
 - Supabase Auth's URL configuration includes the production domain in its redirect allow-list (signup, recovery and OAuth-linking redirects are built from `location.origin` at runtime)
 - To deploy your own instance: push to GitHub, import the repo in Vercel (or `vercel deploy --prod`), and set the environment variables
@@ -367,9 +368,9 @@ Deployed on **Vercel**: https://cyber-path-phi.vercel.app
 
 - Labs tracker — provider labs, CTFs and home-lab exercises with notes and evidence (placeholder exists; build planned)
 - Roadmap content for later phases — Web Fundamentals, Web Security (OWASP/PortSwigger-aligned), Cryptography, and beyond
-- Automated E2E testing (Playwright) and a CI workflow running lint + typecheck + tests on push
+- Automated E2E testing (Playwright) on top of the existing CI pipeline (lint + typecheck + tests + build on every push)
 - Application-level rate limiting and 2FA support in the UI
-- Auto-deploy on git push (Vercel ↔ GitHub app connection) and a custom domain
+- A custom domain (auto-deploy on git push is live)
 - More career paths, richer revision intelligence and portfolio export options
 
 ## Contributing
