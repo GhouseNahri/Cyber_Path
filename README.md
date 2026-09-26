@@ -1,6 +1,6 @@
 # Cyber_Path
 
-![Next.js](https://img.shields.io/badge/Next.js-16-black) ![React](https://img.shields.io/badge/React-19-149eca) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6) ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth%20%2B%20RLS-3fcf8e) ![Tests](https://img.shields.io/badge/tests-117%20passing-brightgreen)
+![CI](https://github.com/GhouseNahri/Cyber_Path/actions/workflows/ci.yml/badge.svg) ![Next.js](https://img.shields.io/badge/Next.js-16-black) ![React](https://img.shields.io/badge/React-19-149eca) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6) ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth%20%2B%20RLS-3fcf8e) ![Tests](https://img.shields.io/badge/tests-117%20passing-brightgreen)
 
 > A personal cybersecurity learning command center: a structured roadmap with prerequisites, real timed study sessions, daily missions, streaks, quizzes, spaced revision, projects and career-path guidance — all persisted in a live database. Nothing is simulated.
 
