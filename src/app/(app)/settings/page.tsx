@@ -5,11 +5,13 @@ import { intervalsOf } from "@/lib/revision/queries";
 import { SettingsForm } from "./SettingsForm";
 import { RevisionIntervalsForm } from "./RevisionIntervalsForm";
 import { DangerZone } from "./DangerZone";
+import { AiSettings } from "./AiSettings";
+import { getAiPermissions } from "@/lib/ai/actions";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-  const [user, profile] = await Promise.all([getUser(), getProfile()]);
+  const [user, profile, aiPerms] = await Promise.all([getUser(), getProfile(), getAiPermissions()]);
 
   return (
     <div className="space-y-6">
@@ -60,6 +62,15 @@ export default async function SettingsPage() {
               Password changes and account deletion are coming soon — they touch auth
               credentials and deserve careful handling.
             </p>
+          </Card>
+
+          <Card>
+            <CardHeader title="AI assistant" subtitle="What the assistant may see, and how it responds" />
+            {aiPerms ? (
+              <AiSettings initial={aiPerms} />
+            ) : (
+              <p className="text-sm text-danger">AI settings could not be loaded. Refresh the page.</p>
+            )}
           </Card>
 
           <Card>

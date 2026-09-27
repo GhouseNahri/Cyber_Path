@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { DesktopHeader } from "@/components/shell/DesktopHeader";
+import { AiAssistant } from "@/components/ai/AiAssistant";
 import { getProfile, getUser } from "@/lib/profile";
 
 /** Everything in the (app) group requires: a valid session AND completed
@@ -17,6 +18,7 @@ export default async function ProtectedAppLayout({ children }: { children: React
     <AppShell user={user}>
       <DesktopHeader user={user} />
       {children}
+      <AiAssistant />
     </AppShell>
   );
 }

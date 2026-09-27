@@ -1,0 +1,493 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui";
+import { Markdown } from "./Markdown";
+import {
+  createConversation,
+  deleteConversation,
+  listConversations,
+  listMessages,
+  getAiPermissions,
+} from "@/lib/ai/actions";
+
+type UiMessage = { id: string; role: "user" | "assistant"; content: string };
+type ConversationRow = { id: string; title: string; updated_at: string };
+
+type Props = {
+  /** Pre-seeds a topic-focused chat (roadmap "Ask AI about this topic"). */
+  topicSlug?: string | null;
+  topicTitle?: string | null;
+};
+
+const SUGGESTIONS = [
+  "Explain SQL injection like I'm a beginner",
+  "What should I study next?",
+  "I have 30 minutes — what should I do?",
+  "Why is Linux important for cybersecurity?",
+];
+
+/** Floating AI assistant: launcher bubble + slide-in panel.
+ *  Desktop: right-side panel. Mobile (<sm): full-screen sheet. */
+export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
+  const [open, setOpen] = useState(false);
+  const [panelVisible, setPanelVisible] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [streamText, setStreamText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notConfigured, setNotConfigured] = useState(false);
+  const [visibleContext, setVisibleContext] = useState<string[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [perms, setPerms] = useState<Awaited<ReturnType<typeof getAiPermissions>>>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load permissions once; decide whether the launcher should render at all.
+  useEffect(() => {
+    let cancelled = false;
+    getAiPermissions().then((p) => {
+      if (!cancelled) setPerms(p);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Focus the input when the panel opens; Escape closes (not while streaming).
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 250);
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !streaming) {
+        setOpen(false);
+        setPanelVisible(false);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, streaming]);
+
+  // Auto-scroll to the newest content while the transcript grows.
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages.length, streamText]);
+
+  async function openPanel() {
+    setOpen(true);
+    setPanelVisible(true);
+    const [convs, p] = await Promise.all([listConversations(), getAiPermissions()]);
+    setConversations(convs);
+    setPerms(p);
+  }
+
+  async function loadConversation(id: string) {
+    if (streaming) return;
+    setConversationId(id);
+    setMessages(await listMessages(id));
+    setError(null);
+    setShowHistory(false);
+  }
+
+  function newChat() {
+    if (streaming) return;
+    setConversationId(null);
+    setMessages([]);
+    setStreamText("");
+    setError(null);
+    setVisibleContext([]);
+    inputRef.current?.focus();
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
+    if (streamText.trim()) {
+      setMessages((m) => [...m, { id: `local-${Date.now()}`, role: "assistant", content: streamText }]);
+    }
+    setStreaming(false);
+    setStreamText("");
+  }
+
+  const send = useCallback(
+    async (text: string) => {
+      const content = text.trim();
+      if (!content || streaming) return;
+      setError(null);
+      setNotConfigured(false);
+      setStreaming(true);
+      setStreamText("");
+      setMessages((m) => [...m, { id: `u-${Date.now()}`, role: "user", content }]);
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const res = await fetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: content, conversationId, topicSlug }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          if (res.status === 503) setNotConfigured(true);
+          setError(body.error ?? "The assistant is unavailable right now.");
+          setStreaming(false);
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let acc = "";
+        let sawMeta = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buffer.indexOf("\n\n")) >= 0) {
+            const raw = buffer.slice(0, idx).trim();
+            buffer = buffer.slice(idx + 2);
+            if (!raw.startsWith("data:")) continue;
+            try {
+              const evt = JSON.parse(raw.slice(5)) as {
+                type: string;
+                text?: string;
+                error?: string;
+                conversationId?: string | null;
+                visibleContext?: string[];
+              };
+              if (evt.type === "meta") {
+                sawMeta = true;
+                if (evt.conversationId) setConversationId(evt.conversationId);
+                if (evt.visibleContext) setVisibleContext(evt.visibleContext);
+              } else if (evt.type === "delta") {
+                acc += evt.text ?? "";
+                setStreamText(acc);
+              } else if (evt.type === "error") {
+                setError(evt.error ?? "The AI request failed.");
+              }
+            } catch {
+              // Ignore malformed frames.
+            }
+          }
+        }
+
+        if (!sawMeta && !acc) {
+          setError("The assistant returned no response. Try again.");
+        }
+        if (acc) {
+          setMessages((m) => [...m, { id: `a-${Date.now()}`, role: "assistant", content: acc }]);
+        }
+        setStreamText("");
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") {
+          // Stopped by the user — partial text was already committed above.
+        } else {
+          setError("Network error — the assistant is unreachable. Try again.");
+        }
+      } finally {
+        setStreaming(false);
+        setStreamText("");
+        abortRef.current = null;
+      }
+    },
+    [conversationId, streaming, topicSlug],
+  );
+
+  // Topic pre-seed: when opened with a topic, start scoped (runs once).
+  // Deferred off the effect body so state updates stay out of the render cycle.
+  const firstRunRef = useRef(false);
+  useEffect(() => {
+    if (!open || firstRunRef.current || !topicSlug) return;
+    firstRunRef.current = true;
+    const t = setTimeout(
+      () => void send(`Explain the topic "${topicTitle ?? topicSlug}" and what I should focus on.`),
+      0,
+    );
+    return () => clearTimeout(t);
+  }, [open, topicSlug, topicTitle, send]);
+
+  const canSend = input.trim().length > 0 && !streaming && perms?.assistant_enabled !== false;
+
+  return (
+    <div>
+      {/* Launcher bubble (hidden when disabled in settings) */}
+      {perms?.assistant_enabled !== false ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (open) {
+              setOpen(false);
+              setPanelVisible(false);
+            } else {
+              void openPanel();
+            }
+          }}
+          aria-expanded={open}
+          aria-controls="ai-panel"
+          aria-label={open ? "Close the AI assistant" : "Open the AI assistant"}
+          className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-accent text-accent-ink shadow-lift transition-transform hover:scale-105 active:scale-95"
+        >
+          {open ? (
+            <svg viewBox="0 0 24 24" className="size-6" fill="none" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <span aria-hidden="true" className="text-xl">🤖</span>
+          )}
+        </button>
+      ) : null}
+
+      {/* Backdrop */}
+      {open ? (
+        <div
+          className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 ${
+            panelVisible ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={() => {
+            if (!streaming) {
+              setOpen(false);
+              setPanelVisible(false);
+            }
+          }}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      {/* Panel */}
+      {open ? (
+        <div
+          id="ai-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-label="AI assistant"
+          className={`fixed z-50 flex flex-col border-hairline bg-surface-1 shadow-lift transition-transform duration-200 ease-out-expo max-sm:inset-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:border-0 sm:bottom-4 sm:right-4 sm:top-4 sm:w-[420px] sm:rounded-2xl sm:border ${
+            panelVisible ? "translate-x-0" : "sm:translate-x-[110%] max-sm:translate-y-2"
+          }`}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-hairline px-4 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <span aria-hidden="true">🤖</span>
+              <h2 className="font-display text-[15px] font-semibold text-ink-high">AI Assistant</h2>
+              {topicTitle ? (
+                <span className="truncate rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">{topicTitle}</span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowHistory((v) => !v)}
+                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high"
+                aria-label="Toggle conversation history"
+                title="History"
+              >
+                <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden="true">
+                  <path d="M12 8v4l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={newChat}
+                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high"
+                aria-label="Start a new chat"
+                title="New chat"
+              >
+                <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden="true">
+                  <path d="M12 5v14m-7-7h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* History drawer */}
+          {showHistory ? (
+            <div className="border-b border-hairline bg-surface-2/40 px-2 py-2">
+              {conversations.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-ink-low">No saved chats yet.</p>
+              ) : (
+                <ul className="max-h-44 space-y-0.5 overflow-y-auto">
+                  {conversations.map((c) => (
+                    <li key={c.id} className="group flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => void loadConversation(c.id)}
+                        className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left text-[13px] text-ink-high hover:bg-surface-2"
+                      >
+                        {c.title}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await deleteConversation(c.id);
+                          setConversations((cs) => cs.filter((x) => x.id !== c.id));
+                          if (conversationId === c.id) newChat();
+                        }}
+                        className="rounded-lg p-1 text-ink-low opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 focus-visible:opacity-100"
+                        aria-label={`Delete conversation: ${c.title}`}
+                      >
+                        <svg viewBox="0 0 24 24" className="size-3.5" fill="none" aria-hidden="true">
+                          <path d="M4 7h16M9 7V5h6v2m-7 0 1 12h6l1-12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+
+          {/* Context visibility strip */}
+          {visibleContext.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 border-b border-hairline bg-surface-2/30 px-4 py-2">
+              {visibleContext.map((v) => (
+                <span key={v} className="rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
+                  {v}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Transcript */}
+          <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            {messages.length === 0 && !streaming ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-hairline bg-surface-2/40 p-4">
+                  <p className="text-sm font-medium text-ink-high">How can I help?</p>
+                  <p className="mt-1 text-[13px] text-ink-medium">
+                    Ask cybersecurity questions, get topic explanations, or plan your next study session.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => void send(s)}
+                      className="w-full rounded-xl border border-hairline bg-surface-2/40 px-3 py-2 text-left text-[13px] text-ink-medium hover:border-accent/40 hover:text-ink-high"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {messages.map((m) => (
+              <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                {m.role === "user" ? (
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent/15 px-3.5 py-2.5 text-[13.5px] text-ink-high">
+                    {m.content}
+                  </div>
+                ) : (
+                  <div className="group w-full max-w-[95%]">
+                    <Markdown>{m.content}</Markdown>
+                    <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(m.content);
+                          setCopiedId(m.id);
+                          setTimeout(() => setCopiedId(null), 1500);
+                        }}
+                        className="rounded-md px-1.5 py-0.5 text-[11px] text-ink-low hover:bg-surface-2 hover:text-ink-high"
+                        aria-label="Copy response"
+                      >
+                        {copiedId === m.id ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {streamText ? (
+              <div className="flex justify-start">
+                <div className="w-full max-w-[95%]">
+                  <Markdown>{streamText}</Markdown>
+                  <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-accent align-middle" aria-hidden="true" />
+                </div>
+              </div>
+            ) : null}
+
+            {error ? (
+              <div className="rounded-xl border border-danger/30 bg-danger/[0.07] p-3 text-[13px] text-danger">
+                <p>{error}</p>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void send(messages.filter((m) => m.role === "user").at(-1)?.content ?? input)}
+                  >
+                    Retry
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setError(null)}>
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Composer */}
+          <form
+            className="border-t border-hairline p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const t = input;
+              setInput("");
+              void send(t);
+            }}
+          >
+            {notConfigured ? (
+              <p className="mb-2 rounded-lg border border-warn/30 bg-warn/[0.08] px-3 py-2 text-xs text-warn">
+                AI isn&apos;t configured on this deployment yet — add the AI_API_KEY server environment variable.
+              </p>
+            ) : null}
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    const t = input;
+                    setInput("");
+                    void send(t);
+                  }
+                }}
+                rows={Math.min(4, Math.ceil(input.length / 40) || 1)}
+                placeholder="Ask anything…"
+                aria-label="Message the AI assistant"
+                disabled={perms?.assistant_enabled === false}
+                className="max-h-28 min-h-11 w-full resize-none rounded-xl border border-hairline bg-surface-2/70 px-3.5 py-2.5 text-sm text-ink-high placeholder:text-ink-low focus:border-accent/50 focus:outline-none disabled:opacity-50"
+              />
+              {streaming ? (
+                <Button type="button" variant="secondary" size="md" onClick={stopGeneration} aria-label="Stop generating">
+                  ■
+                </Button>
+              ) : (
+                <Button type="submit" variant="primary" size="md" disabled={!canSend} aria-label="Send message">
+                  ↑
+                </Button>
+              )}
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </div>
+  );
+}
