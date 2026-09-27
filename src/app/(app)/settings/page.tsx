@@ -4,6 +4,7 @@ import { getProfile, getUser } from "@/lib/profile";
 import { intervalsOf } from "@/lib/revision/queries";
 import { SettingsForm } from "./SettingsForm";
 import { RevisionIntervalsForm } from "./RevisionIntervalsForm";
+import { DangerZone } from "./DangerZone";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -30,6 +31,8 @@ export default async function SettingsPage() {
               <p className="text-sm text-danger">Profile could not be loaded. Refresh the page.</p>
             )}
           </Card>
+
+          <DangerZone />
         </div>
 
         <div className="space-y-6">
