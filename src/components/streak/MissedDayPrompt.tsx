@@ -37,6 +37,10 @@ export function MissedDayPrompt({ dayKey, existingReason }: Props) {
       <Card>
         <CardHeader title="Noted." subtitle="Logged for pattern analysis" />
         <p className="text-sm leading-relaxed text-ink-medium" aria-live="polite">{response}</p>
+        <p className="mt-3 text-[13px] leading-relaxed text-ink-medium">
+          One rough day doesn&apos;t break a habit. Tomorrow&apos;s mission will be sized to help you
+          get moving again.
+        </p>
       </Card>
     );
   }

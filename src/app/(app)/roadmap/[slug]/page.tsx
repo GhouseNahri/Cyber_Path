@@ -6,6 +6,7 @@ import { getResourceStatusesForTopic } from "@/lib/resources/queries";
 import type { ResourceItem } from "@/lib/resources/types";
 import { getTopicNote, getBookmarkedSlugs } from "@/lib/notes/queries";
 import { ResourceList } from "@/components/resources/ResourceList";
+import { AskAiButton } from "@/components/ai/AskAiButton";
 import { TopicNotes } from "@/components/notes/TopicNotes";
 import { BookmarkButton } from "@/components/notes/BookmarkButton";
 import { QuizCard } from "@/components/quiz/QuizCard";
@@ -70,8 +71,9 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
           ) : null}
         </div>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-high">{topic.summary}</p>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <BookmarkButton topicSlug={topic.slug} initialBookmarked={bookmarks.has(topic.slug)} />
+          <AskAiButton topicSlug={topic.slug} topicTitle={topic.title} />
         </div>
       </section>
 

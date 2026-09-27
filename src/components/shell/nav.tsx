@@ -105,6 +105,17 @@ export const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    label: "Achievements",
+    href: "/achievements",
+    description: "Milestones earned from real learning activity",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="size-[18px]">
+        <circle cx="12" cy="9" r="5" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M8.5 13.5 7 21l5-2.5L17 21l-1.5-7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
     label: "Analytics",
     href: "/analytics",
     description: "Study time, velocity and patterns",

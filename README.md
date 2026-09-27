@@ -60,6 +60,8 @@ All of the following are implemented and working:
 
 **Knowledge & retention**
 - **Quiz engine** — 81 seeded questions across all 27 topics, **scored server-side** (the answer key never reaches the browser), 70% pass line, per-question explanations, full attempt history; passing a quiz auto-sets the topic's Test stage
+- **AI assistant** — floating mentor on every page: general cybersecurity chat, six modes (Mentor / Teacher / Debugger / Security Analyst / CTF Coach / Interviewer), topic-aware "Ask AI" with quick actions (Explain / Quiz me / Practice…), and read-only **GitHub project analysis** for repos you explicitly enable. Permission-aware context (roadmap + progress, each toggleable in Settings), conversation history you can delete, streaming responses with stop/retry, per-user rate limits (50 msgs/24h)
+- **Achievements** — milestones derived from real activity (first topic, streaks, quizzes, projects); no busywork badges, no new tables
 - **Spaced revision queue** — completing a topic schedules reviews at 1/3/7/14/30 days (per-user configurable); due reviews feed the dashboard
 - **Weak-topic detection** from quiz scores and low confidence ratings
 
@@ -360,6 +362,11 @@ Deployed on **Vercel**: https://cyber-path-phi.vercel.app
 - `vercel.json` pins serverless Functions to `bom1` (Mumbai), co-located with the Supabase `ap-south-1` database — keeps DB round-trips ~10× faster than the default US region
 - The two `NEXT_PUBLIC_SUPABASE_*` variables are set in the Vercel project's environment settings (Production)
 - Supabase Auth's URL configuration includes the production domain in its redirect allow-list (signup, recovery and OAuth-linking redirects are built from `location.origin` at runtime)
+- **AI configuration** (optional — the app fully works without it; the assistant shows a "not configured" state):
+  - `AI_PROVIDER` — `gemini` (default) · `openai` · `anthropic`
+  - `AI_MODEL` — defaults per provider (e.g. `gemini-2.0-flash`)
+  - `AI_API_KEY` — **server-only** secret (never `NEXT_PUBLIC_*`). Free Gemini keys: aistudio.google.com → "Get API key"
+  - Privacy model: the assistant only sees context the user explicitly allows (Settings → AI assistant), plus what they type. Repo content is fetched read-only per-granted-repository, is deny-listed against secret files, hard-capped, and fenced as untrusted data in prompts
 - To deploy your own instance: push to GitHub, import the repo in Vercel (or `vercel deploy --prod`), and set the environment variables
 
 ## Roadmap / future improvements

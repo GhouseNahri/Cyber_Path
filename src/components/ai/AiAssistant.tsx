@@ -16,12 +16,6 @@ import { AI_MODES, type AiMode } from "@/lib/ai/modes";
 type UiMessage = { id: string; role: "user" | "assistant"; content: string };
 type ConversationRow = { id: string; title: string; updated_at: string };
 
-type Props = {
-  /** Pre-seeds a topic-focused chat (roadmap "Ask AI about this topic"). */
-  topicSlug?: string | null;
-  topicTitle?: string | null;
-};
-
 const SUGGESTIONS = [
   "Explain SQL injection like I'm a beginner",
   "What should I study next?",
@@ -29,9 +23,21 @@ const SUGGESTIONS = [
   "Why is Linux important for cybersecurity?",
 ];
 
+/** Quick actions shown while a topic is active (Phase 14 of the master prompt). */
+const TOPIC_ACTIONS: { label: string; prompt: (title: string) => string }[] = [
+  { label: "Explain", prompt: (t) => `Explain "${t}" step by step for my level.` },
+  { label: "Example", prompt: (t) => `Give me a real-world cybersecurity example of "${t}".` },
+  { label: "Quiz me", prompt: (t) => `Quiz me with 5 questions on "${t}" at my level. Grade my answers as I respond.` },
+  { label: "Practice", prompt: (t) => `Give me a practical exercise for "${t}" I can do in under 30 minutes.` },
+  { label: "Summarize", prompt: (t) => `Summarize "${t}" in 5 bullet points I can revise from.` },
+  { label: "Challenge", prompt: (t) => `Give me a tricky scenario question on "${t}" and walk through the reasoning after I answer.` },
+];
+
 /** Floating AI assistant: launcher bubble + slide-in panel.
- *  Desktop: right-side panel. Mobile (<sm): full-screen sheet. */
-export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
+ *  Desktop: right-side panel. Mobile (<sm): full-screen sheet.
+ *  Any page can summon it via the `cyberpath:ai-ask` CustomEvent
+ *  (detail: { message?, topicSlug?, topicTitle? }). */
+export function AiAssistant() {
   const [open, setOpen] = useState(false);
   const [panelVisible, setPanelVisible] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -55,6 +61,9 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
   const [enabledRepos, setEnabledRepos] = useState<string[]>([]);
   const [attachedRepo, setAttachedRepo] = useState<string | null>(null);
   const [attachBusy, setAttachBusy] = useState<string | null>(null);
+  const [activeTopic, setActiveTopic] = useState<{ slug: string; title: string | null } | null>(null);
+  const pendingAsk = useRef<string | null>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -87,6 +96,21 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
     };
   }, [open, streaming]);
 
+  // External open/ask bridge (roadmap "Ask AI", missed-day support, …).
+  useEffect(() => {
+    function onAsk(e: Event) {
+      const d = (e as CustomEvent<{ message?: string; topicSlug?: string | null; topicTitle?: string | null }>).detail ?? {};
+      if (d.topicSlug !== undefined) {
+        setActiveTopic(d.topicSlug ? { slug: d.topicSlug, title: d.topicTitle ?? null } : null);
+      }
+      if (d.message) pendingAsk.current = d.message;
+      setOpen(true);
+      setPanelVisible(true);
+    }
+    window.addEventListener("cyberpath:ai-ask", onAsk);
+    return () => window.removeEventListener("cyberpath:ai-ask", onAsk);
+  }, []);
+
   // Auto-scroll to the newest content while the transcript grows.
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -118,6 +142,11 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
     inputRef.current?.focus();
   }
 
+  function closePanel() {
+    setOpen(false);
+    setPanelVisible(false);
+  }
+
   function stopGeneration() {
     abortRef.current?.abort();
     if (streamText.trim()) {
@@ -126,6 +155,9 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
     setStreaming(false);
     setStreamText("");
   }
+
+  const activeTopicTitle = activeTopic?.title ?? null;
+  const activeTopicSlug = activeTopic?.slug ?? null;
 
   const send = useCallback(
     async (text: string) => {
@@ -144,7 +176,7 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
         const res = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: content, conversationId, topicSlug, mode, repoFullName: attachedRepo }),
+          body: JSON.stringify({ message: content, conversationId, topicSlug: activeTopicSlug, mode, repoFullName: attachedRepo }),
           signal: controller.signal,
         });
 
@@ -214,21 +246,18 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
         abortRef.current = null;
       }
     },
-    [conversationId, streaming, topicSlug, mode, attachedRepo],
+    [conversationId, streaming, activeTopicSlug, mode, attachedRepo],
   );
 
-  // Topic pre-seed: when opened with a topic, start scoped (runs once).
-  // Deferred off the effect body so state updates stay out of the render cycle.
-  const firstRunRef = useRef(false);
+  // Fire any pending external ask once the panel is open (state settled).
   useEffect(() => {
-    if (!open || firstRunRef.current || !topicSlug) return;
-    firstRunRef.current = true;
-    const t = setTimeout(
-      () => void send(`Explain the topic "${topicTitle ?? topicSlug}" and what I should focus on.`),
-      0,
-    );
+    if (!open) return;
+    const msg = pendingAsk.current;
+    if (!msg) return;
+    pendingAsk.current = null;
+    const t = setTimeout(() => void send(msg), 50);
     return () => clearTimeout(t);
-  }, [open, topicSlug, topicTitle, send]);
+  }, [open, send]);
 
   const canSend = input.trim().length > 0 && !streaming && perms?.assistant_enabled !== false;
 
@@ -293,8 +322,8 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
             <div className="flex min-w-0 items-center gap-2">
               <span aria-hidden="true">🤖</span>
               <h2 className="font-display text-[15px] font-semibold text-ink-high">AI Assistant</h2>
-              {topicTitle ? (
-                <span className="truncate rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">{topicTitle}</span>
+              {activeTopicTitle ? (
+                <span className="truncate rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">{activeTopicTitle}</span>
               ) : null}
             </div>
             <div className="flex items-center gap-1">
@@ -489,6 +518,23 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
                   ))}
                 </ul>
               )}
+            </div>
+          ) : null}
+
+          {/* Topic quick actions (Phase 14) */}
+          {activeTopicSlug ? (
+            <div className="flex flex-wrap gap-1.5 border-b border-hairline bg-surface-2/30 px-4 py-2">
+              {TOPIC_ACTIONS.map((a) => (
+                <button
+                  key={a.label}
+                  type="button"
+                  disabled={streaming}
+                  onClick={() => void send(a.prompt(activeTopicTitle ?? activeTopicSlug))}
+                  className="rounded-full border border-hairline bg-surface-1 px-2.5 py-1 text-[11px] text-ink-medium transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
+                >
+                  {a.label}
+                </button>
+              ))}
             </div>
           ) : null}
 
