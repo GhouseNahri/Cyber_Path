@@ -24,8 +24,8 @@ export type AiPermissions = {
 };
 
 export type BuiltContext = {
-  /** Fully-formed system prompt for the request. */
-  system: string;
+  /** Context-only prompt fragment (base rules/level are added by modes). */
+  contextBlock: string;
   /** Human-readable list of context categories actually included. */
   visible: string[];
 };
@@ -41,18 +41,6 @@ export const buildContext = cache(
   async (perms: AiPermissions, topicSlug?: string | null): Promise<BuiltContext> => {
     const parts: string[] = [];
     const visible: string[] = [];
-
-    parts.push(
-      "You are the Cyber_Path AI mentor — a patient, practical cybersecurity tutor inside a personal learning platform.",
-      "Rules: Be accurate and concrete. Prefer plain language with real examples. Never invent details about the user's account, progress, or projects — if the provided context does not answer something, say so or ask. Never provide help with clearly malicious or illegal activity; frame everything as defensive learning. Format answers in Markdown; use fenced code blocks with language tags.",
-    );
-    const level =
-      perms.response_level === "beginner"
-        ? "Assume beginner-level knowledge; explain jargon the first time it appears."
-        : perms.response_level === "intermediate"
-          ? "Assume working knowledge; skip basics unless asked."
-          : "Assume advanced knowledge; be terse and technical.";
-    parts.push(level);
 
     const profile = await getProfile();
     if (profile) {
@@ -110,7 +98,7 @@ export const buildContext = cache(
       }
     }
 
-    return { system: truncate(parts.join("\n\n")), visible };
+    return { contextBlock: truncate(parts.join("\n\n")), visible };
   },
 );
 

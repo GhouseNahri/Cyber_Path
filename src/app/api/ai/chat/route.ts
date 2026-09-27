@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/profile";
 import { getAiPermissions } from "@/lib/ai/actions";
 import { buildContext } from "@/lib/ai/context";
+import { isAiMode, buildSystemPrompt } from "@/lib/ai/modes";
+import { fetchRepoContext, fenceRepoContext } from "@/lib/ai/githubContext";
 
 export const runtime = "nodejs";
 
@@ -29,11 +31,15 @@ export async function POST(req: NextRequest) {
     message?: unknown;
     conversationId?: unknown;
     topicSlug?: unknown;
+    mode?: unknown;
+    repoFullName?: unknown;
   };
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
   const conversationId = typeof body.conversationId === "string" ? body.conversationId : null;
   const topicSlug = typeof body.topicSlug === "string" ? body.topicSlug : null;
+  const mode = isAiMode(body.mode) ? body.mode : "mentor";
+  const repoFullName = typeof body.repoFullName === "string" ? body.repoFullName : null;
 
   if (!message) return Response.json({ error: "Empty message." }, { status: 400 });
   if (message.length > MAX_MESSAGE_CHARS) {
@@ -90,7 +96,42 @@ export async function POST(req: NextRequest) {
   }
   // When history is disabled, convId stays null → nothing is persisted.
 
-  const { system, visible } = await buildContext(perms, topicSlug);
+  const { contextBlock, visible } = await buildContext(perms, topicSlug);
+
+  // ── Repository context: ONLY for explicitly granted repos ────────────
+  let system = buildSystemPrompt(mode, contextBlock, perms.response_level);
+  let repoMeta: { repo: string; files: number; bytes: number } | null = null;
+  if (repoFullName) {
+    if (!perms.use_github_context) {
+      return Response.json({ error: "GitHub context is disabled in Settings → AI assistant." }, { status: 403 });
+    }
+    const { data: grant } = await supabase
+      .from("ai_repo_access")
+      .select("repo_full_name")
+      .eq("user_id", user.id)
+      .eq("repo_full_name", repoFullName)
+      .eq("enabled", true)
+      .maybeSingle();
+    if (!grant) {
+      return Response.json({ error: "AI access for that repository is not enabled." }, { status: 403 });
+    }
+    // Token never leaves this server scope; read-only GETs only.
+    const { data: conn } = await supabase
+      .from("github_connections")
+      .select("access_token")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const token = (conn as { access_token?: string } | null)?.access_token;
+    if (!token) {
+      return Response.json({ error: "Connect GitHub first from the GitHub page." }, { status: 400 });
+    }
+    const ctx = await fetchRepoContext(repoFullName, { token, signal: req.signal });
+    if (!ctx.ok) {
+      return Response.json({ error: ctx.error ?? "Could not read the repository." }, { status: 502 });
+    }
+    system = buildSystemPrompt(mode, `${contextBlock}\n\n${fenceRepoContext(ctx)}`.trim(), perms.response_level);
+    repoMeta = { repo: ctx.repo, files: ctx.files.length, bytes: ctx.totalBytes };
+  }
 
   // ── Recent history window (for continuity when history is on) ─────────────
   let history: ApiMessage[] = [];
@@ -112,7 +153,7 @@ export async function POST(req: NextRequest) {
       const sse = (data: unknown) => controller.enqueue(sseEncode(data));
 
       try {
-        sse({ type: "meta", conversationId: convId, visibleContext: visible });
+        sse({ type: "meta", conversationId: convId, visibleContext: visible, repo: repoMeta });
 
         // Persist the user message (only when history is enabled).
         if (convId && perms.history_enabled) {

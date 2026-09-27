@@ -100,10 +100,10 @@ export function AiSettings({ initial }: { initial: AiPermissions }) {
         />
         <Toggle
           label="Use connected GitHub repositories"
-          description="Coming with the GitHub project-analysis milestone. Nothing is shared until you explicitly enable a repository."
+          description="Read-only, per-repository, and only after you explicitly enable each one from the assistant's attach drawer. The AI can read files to help you — it can never push, modify or delete anything."
           checked={perms.use_github_context}
           onChange={(v) => void save({ use_github_context: v })}
-          disabled
+          disabled={saving || !perms.assistant_enabled}
         />
         <Toggle
           label="Save conversation history"

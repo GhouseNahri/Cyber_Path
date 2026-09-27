@@ -10,6 +10,8 @@ import {
   listMessages,
   getAiPermissions,
 } from "@/lib/ai/actions";
+import { listAiRepos, enableAiRepoAccess, disableAiRepoAccess, listGithubReposForAi } from "@/lib/ai/repoActions";
+import { AI_MODES, type AiMode } from "@/lib/ai/modes";
 
 type UiMessage = { id: string; role: "user" | "assistant"; content: string };
 type ConversationRow = { id: string; title: string; updated_at: string };
@@ -44,6 +46,15 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
   const [showHistory, setShowHistory] = useState(false);
   const [perms, setPerms] = useState<Awaited<ReturnType<typeof getAiPermissions>>>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [mode, setMode] = useState<AiMode>("mentor");
+  const [showModes, setShowModes] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [repos, setRepos] = useState<{ fullName: string; name: string; language: string | null; isPrivate: boolean }[]>([]);
+  const [repoConnected, setRepoConnected] = useState(false);
+  const [repoLogin, setRepoLogin] = useState<string | null>(null);
+  const [enabledRepos, setEnabledRepos] = useState<string[]>([]);
+  const [attachedRepo, setAttachedRepo] = useState<string | null>(null);
+  const [attachBusy, setAttachBusy] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -133,7 +144,7 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
         const res = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: content, conversationId, topicSlug }),
+          body: JSON.stringify({ message: content, conversationId, topicSlug, mode, repoFullName: attachedRepo }),
           signal: controller.signal,
         });
 
@@ -203,7 +214,7 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
         abortRef.current = null;
       }
     },
-    [conversationId, streaming, topicSlug],
+    [conversationId, streaming, topicSlug, mode, attachedRepo],
   );
 
   // Topic pre-seed: when opened with a topic, start scoped (runs once).
@@ -289,6 +300,42 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
             <div className="flex items-center gap-1">
               <button
                 type="button"
+                onClick={async () => {
+                  setAttachOpen((v) => !v);
+                  setShowModes(false);
+                  if (!attachOpen) {
+                    const gh = await listGithubReposForAi();
+                    if (gh.ok) {
+                      setRepos(gh.repos);
+                      setRepoConnected(gh.connected);
+                      setRepoLogin(gh.login);
+                      const en = await listAiRepos();
+                      setEnabledRepos(en.filter((r) => r.enabled).map((r) => r.repo_full_name));
+                    }
+                  }
+                }}
+                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high"
+                aria-label="Attach a GitHub repository"
+                title="Attach project"
+              >
+                <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden="true">
+                  <path d="M12 5v14m-7-7h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowModes((v) => !v);
+                  setAttachOpen(false);
+                }}
+                className={`rounded-lg p-1.5 hover:bg-surface-2 ${showModes ? "text-accent" : "text-ink-medium hover:text-ink-high"}`}
+                aria-label="Switch assistant mode"
+                title={`Mode: ${AI_MODES.find((m) => m.id === mode)?.label}`}
+              >
+                <span aria-hidden="true" className="text-sm">{AI_MODES.find((m) => m.id === mode)?.emoji}</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowHistory((v) => !v)}
                 className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high"
                 aria-label="Toggle conversation history"
@@ -311,6 +358,102 @@ export function AiAssistant({ topicSlug = null, topicTitle = null }: Props) {
               </button>
             </div>
           </div>
+
+          {/* Mode picker */}
+          {showModes ? (
+            <div className="grid grid-cols-2 gap-1.5 border-b border-hairline bg-surface-2/40 p-2">
+              {AI_MODES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => {
+                    setMode(m.id);
+                    setShowModes(false);
+                  }}
+                  className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                    mode === m.id
+                      ? "border-accent/50 bg-accent/10 text-accent"
+                      : "border-hairline bg-surface-1 text-ink-medium hover:border-accent/30 hover:text-ink-high"
+                  }`}
+                >
+                  <span aria-hidden="true">{m.emoji}</span> <span className="font-medium">{m.label}</span>
+                  <span className="mt-0.5 block text-[11px] text-ink-low">{m.hint}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Attach-project drawer */}
+          {attachOpen ? (
+            <div className="max-h-64 space-y-1.5 overflow-y-auto border-b border-hairline bg-surface-2/40 p-2">
+              {!repoConnected ? (
+                <p className="px-2 py-1 text-xs text-ink-medium">
+                  Connect GitHub from the <a href="/github" className="text-accent hover:underline">GitHub page</a> first.
+                </p>
+              ) : repos.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-ink-low">No repositories found.</p>
+              ) : (
+                repos.map((r) => {
+                  const enabled = enabledRepos.includes(r.fullName);
+                  const attached = attachedRepo === r.fullName;
+                  return (
+                    <div key={r.fullName} className="flex items-center gap-2 rounded-xl border border-hairline bg-surface-1 px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium text-ink-high">{r.name}</p>
+                        <p className="text-[11px] text-ink-low">{r.language ?? "—"}{r.isPrivate ? " · private" : ""}{enabled ? " · AI: read-only" : ""}</p>
+                      </div>
+                      {enabled ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setAttachedRepo(attached ? null : r.fullName)}
+                            className={`rounded-lg px-2 py-1 text-[11px] ${attached ? "bg-accent/15 text-accent" : "text-ink-medium hover:bg-surface-2"}`}
+                          >
+                            {attached ? "Attached ✓" : "Attach"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setAttachBusy(r.fullName);
+                              await disableAiRepoAccess(r.fullName);
+                              setEnabledRepos((rs) => rs.filter((x) => x !== r.fullName));
+                              if (attachedRepo === r.fullName) setAttachedRepo(null);
+                              setAttachBusy(null);
+                            }}
+                            disabled={attachBusy === r.fullName}
+                            className="rounded-lg p-1 text-ink-low hover:text-danger"
+                            aria-label={`Disconnect AI access for ${r.name}`}
+                          >
+                            ✕
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setAttachBusy(r.fullName);
+                            // Explicit read-only consent happens in the confirm click below.
+                            const res = await enableAiRepoAccess(r.fullName, window.confirm(
+                              `Allow the AI assistant READ-ONLY access to "${r.fullName}"?\n\nIt can read files from this repository to help you. It can never push, modify, or delete anything.`
+                            ));
+                            if (res.ok) setEnabledRepos((rs) => [...rs, r.fullName]);
+                            setAttachBusy(null);
+                          }}
+                          disabled={attachBusy === r.fullName}
+                          className="rounded-lg border border-hairline px-2 py-1 text-[11px] text-ink-medium hover:border-accent/40 hover:text-accent"
+                        >
+                          Enable AI
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+              {attachedRepo ? (
+                <p className="px-2 pt-1 text-[11px] text-accent">Attached: {attachedRepo} — the AI reads it read-only while attached.</p>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* History drawer */}
           {showHistory ? (
