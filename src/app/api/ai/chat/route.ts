@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
             { role: "user", content: message },
           ],
           signal: req.signal,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 4096,
         })) {
           if (chunk.text) {
             collector.push(chunk.text);
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
           status === 429
             ? "The AI provider is rate-limiting requests. Try again in a moment."
             : status === 503
-              ? "AI is not configured on this deployment yet — add AI_API_KEY (server env)."
+              ? "The AI provider is temporarily overloaded. Give it a moment and try again."
               : status === 404
                 ? "The configured AI model isn't available on this provider — set AI_MODEL to a model your provider currently serves (the default tries Google's rolling alias first)."
                 : status === 400

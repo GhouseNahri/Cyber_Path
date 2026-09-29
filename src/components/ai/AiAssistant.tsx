@@ -272,7 +272,7 @@ export function AiAssistant() {
         }
 
         if (!sawMeta && !acc) {
-          setError("The assistant returned no response. Try again.");
+          setError("The AI provider returned an empty response (it may be overloaded). Try again in a moment.");
         }
         if (acc) {
           setMessages((m) => [...m, { id: `a-${Date.now()}`, role: "assistant", content: acc }]);

@@ -7,8 +7,11 @@
  *
  * MODEL STRATEGY (Gemini): the default is Google's rolling alias
  * `gemini-flash-latest`, which always tracks the current flash model, so
- * scheduled model retirements stop breaking the assistant. If the alias is
- * ever unavailable (404), streamChat retries once with `GEMINI_FALLBACK_MODEL`.
+ * scheduled model retirements stop breaking the assistant. Stream attempts
+ * degrade gracefully: thinking-capable models get `thinkingBudget: 0` (so
+ * the output budget is spent on answers, not hidden reasoning), models that
+ * reject that field are retried without it, a 404 falls back to
+ * `GEMINI_FALLBACK_MODEL`, and transient overload (500/503) is retried once.
  *
  * SECURITY: `AI_API_KEY` is a server-only secret. It must never be prefixed
  * with NEXT_PUBLIC_ and never crosses to the client; this module throws if
@@ -109,26 +112,43 @@ export async function* streamChat(options: ChatOptions): AsyncGenerator<ChatChun
     const contents = messages
       .filter((m) => m.role !== "system")
       .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
-    const payload = JSON.stringify({
-      contents,
-      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-      generationConfig: { temperature, maxOutputTokens },
-    });
 
-    const attempt = async (modelName: string) => {
-      const url = `${providerHost(provider)}/${modelName}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`;
-      return fetch(url, {
+    const attempt = (modelName: string, withThinking: boolean) =>
+      fetch(`${providerHost(provider)}/${modelName}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal,
-        body: payload,
+        body: JSON.stringify({
+          contents,
+          ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+          generationConfig: {
+            temperature,
+            maxOutputTokens,
+            // Thinking-capable flash models otherwise spend the entire output
+            // budget on hidden reasoning before emitting a single word.
+            ...(withThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          },
+        }),
       });
-    };
 
-    let res = await attempt(model);
+    let currentModel = model;
+    let withThinking = true;
+    let res = await attempt(currentModel, withThinking);
+    // Some models reject thinkingConfig outright — retry without it once.
+    if (res.status === 400) {
+      withThinking = false;
+      res = await attempt(currentModel, withThinking);
+    }
     // The rolling alias can lag behind a retirement window — fall back once.
-    if (res.status === 404 && model !== GEMINI_FALLBACK_MODEL) {
-      res = await attempt(GEMINI_FALLBACK_MODEL);
+    if (res.status === 404 && currentModel !== GEMINI_FALLBACK_MODEL) {
+      currentModel = GEMINI_FALLBACK_MODEL;
+      withThinking = false;
+      res = await attempt(currentModel, withThinking);
+    }
+    // Transient provider overload: one short backoff, then a single retry.
+    if ((res.status === 503 || res.status === 500) && !signal?.aborted) {
+      await new Promise((r) => setTimeout(r, 900));
+      if (!signal?.aborted) res = await attempt(currentModel, withThinking);
     }
     if (!res.ok || !res.body) {
       const detail = await res.text().catch(() => "");
