@@ -5,6 +5,11 @@
  * chosen server-side from environment variables, so swapping providers or
  * models later never touches feature code.
  *
+ * MODEL STRATEGY (Gemini): the default is Google's rolling alias
+ * `gemini-flash-latest`, which always tracks the current flash model, so
+ * scheduled model retirements stop breaking the assistant. If the alias is
+ * ever unavailable (404), streamChat retries once with `GEMINI_FALLBACK_MODEL`.
+ *
  * SECURITY: `AI_API_KEY` is a server-only secret. It must never be prefixed
  * with NEXT_PUBLIC_ and never crosses to the client; this module throws if
  * imported into a client bundle by accident (`"server-only"` guard).
@@ -47,9 +52,16 @@ export function getProviderConfig(): ProviderConfig {
   const provider: ProviderName = raw === "openai" || raw === "anthropic" ? raw : "gemini";
   const model =
     process.env.AI_MODEL?.trim() ||
-    (provider === "gemini" ? "gemini-2.5-flash" : provider === "openai" ? "gpt-4o-mini" : "claude-3-5-haiku-latest");
+    (provider === "gemini"
+      ? "gemini-flash-latest"
+      : provider === "openai"
+        ? "gpt-4o-mini"
+        : "claude-3-5-haiku-latest");
   return { provider, model, hasKey: isAiConfigured() };
 }
+
+/** Gemini fallback when the rolling alias is unavailable (rare). */
+export const GEMINI_FALLBACK_MODEL = "gemini-2.5-flash";
 
 /** Thrown when the provider returns a non-200; `status` maps to UI states. */
 export class AiProviderError extends Error {
@@ -97,18 +109,27 @@ export async function* streamChat(options: ChatOptions): AsyncGenerator<ChatChun
     const contents = messages
       .filter((m) => m.role !== "system")
       .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
-
-    const url = `${providerHost(provider)}/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal,
-      body: JSON.stringify({
-        contents,
-        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-        generationConfig: { temperature, maxOutputTokens },
-      }),
+    const payload = JSON.stringify({
+      contents,
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      generationConfig: { temperature, maxOutputTokens },
     });
+
+    const attempt = async (modelName: string) => {
+      const url = `${providerHost(provider)}/${modelName}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`;
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal,
+        body: payload,
+      });
+    };
+
+    let res = await attempt(model);
+    // The rolling alias can lag behind a retirement window — fall back once.
+    if (res.status === 404 && model !== GEMINI_FALLBACK_MODEL) {
+      res = await attempt(GEMINI_FALLBACK_MODEL);
+    }
     if (!res.ok || !res.body) {
       const detail = await res.text().catch(() => "");
       // 429 from the provider = quota/rate limit; surface as-is for the UI.

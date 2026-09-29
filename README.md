@@ -364,7 +364,7 @@ Deployed on **Vercel**: https://cyber-path-phi.vercel.app
 - Supabase Auth's URL configuration includes the production domain in its redirect allow-list (signup, recovery and OAuth-linking redirects are built from `location.origin` at runtime)
 - **AI configuration** (optional — the app fully works without it; the assistant shows a "not configured" state):
   - `AI_PROVIDER` — `gemini` (default) · `openai` · `anthropic`
-  - `AI_MODEL` — defaults per provider (e.g. `gemini-2.5-flash`)
+  - `AI_MODEL` — defaults per provider (e.g. `gemini-flash-latest`)
   - `AI_API_KEY` — **server-only** secret (never `NEXT_PUBLIC_*`). Free Gemini keys: aistudio.google.com → "Get API key"
   - Privacy model: the assistant only sees context the user explicitly allows (Settings → AI assistant), plus what they type. Repo content is fetched read-only per-granted-repository, is deny-listed against secret files, hard-capped, and fenced as untrusted data in prompts
 - To deploy your own instance: push to GitHub, import the repo in Vercel (or `vercel deploy --prod`), and set the environment variables
