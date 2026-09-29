@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Button } from "@/components/ui";
 import { Markdown } from "./Markdown";
 import {
@@ -67,6 +67,9 @@ export function AiAssistant() {
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const prevOpen = useRef(false);
+  const [announce, setAnnounce] = useState("");
 
   // Load permissions once; decide whether the launcher should render at all.
   useEffect(() => {
@@ -79,33 +82,56 @@ export function AiAssistant() {
     };
   }, []);
 
+  const closePanel = useCallback(() => {
+    setOpen(false);
+    setPanelVisible(false);
+  }, []);
+
   // Focus the input when the panel opens; Escape closes (not while streaming).
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => inputRef.current?.focus(), 250);
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !streaming) {
-        setOpen(false);
-        setPanelVisible(false);
-      }
+      if (e.key === "Escape" && !streaming) closePanel();
     }
     document.addEventListener("keydown", onKey);
     return () => {
       clearTimeout(t);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, streaming]);
+  }, [open, streaming, closePanel]);
+
+  // Return focus to the launcher when the panel closes (a11y).
+  useEffect(() => {
+    if (prevOpen.current && !open) launcherRef.current?.focus();
+    prevOpen.current = open;
+  }, [open]);
+
+  // Throttled live region so screen readers follow streaming output without spam.
+  const streamTextRef = useRef("");
+  useEffect(() => {
+    streamTextRef.current = streamText;
+  }, [streamText]);
+  useEffect(() => {
+    if (!streaming) return;
+    const id = setInterval(() => setAnnounce(streamTextRef.current.slice(-400)), 1200);
+    return () => clearInterval(id);
+  }, [streaming]);
 
   // External open/ask bridge (roadmap "Ask AI", missed-day support, …).
   useEffect(() => {
     function onAsk(e: Event) {
       const d = (e as CustomEvent<{ message?: string; topicSlug?: string | null; topicTitle?: string | null }>).detail ?? {};
-      if (d.topicSlug !== undefined) {
-        setActiveTopic(d.topicSlug ? { slug: d.topicSlug, title: d.topicTitle ?? null } : null);
-      }
-      if (d.message) pendingAsk.current = d.message;
-      setOpen(true);
-      setPanelVisible(true);
+      // Microtask defer: keeps state updates out of the effect's synchronous
+      // path (react-hooks/set-state-in-effect) without changing behavior.
+      queueMicrotask(() => {
+        if (d.topicSlug !== undefined) {
+          setActiveTopic(d.topicSlug ? { slug: d.topicSlug, title: d.topicTitle ?? null } : null);
+        }
+        if (d.message) pendingAsk.current = d.message;
+        setOpen(true);
+        setPanelVisible(true);
+      });
     }
     window.addEventListener("cyberpath:ai-ask", onAsk);
     return () => window.removeEventListener("cyberpath:ai-ask", onAsk);
@@ -142,9 +168,26 @@ export function AiAssistant() {
     inputRef.current?.focus();
   }
 
-  function closePanel() {
-    setOpen(false);
-    setPanelVisible(false);
+  /** Keep Tab cycling inside the open panel (a11y focus trap). */
+  function trapTab(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Tab" || !panelRef.current) return;
+    const els = Array.from(
+      panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => el.offsetParent !== null);
+    const first = els[0];
+    const last = els[els.length - 1];
+    if (!first || !last) return;
+    const active = document.activeElement;
+    const inside = panelRef.current.contains(active);
+    if (e.shiftKey && (active === first || !inside)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (active === last || !inside)) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   function stopGeneration() {
@@ -154,6 +197,7 @@ export function AiAssistant() {
     }
     setStreaming(false);
     setStreamText("");
+    setAnnounce("");
   }
 
   const activeTopicTitle = activeTopic?.title ?? null;
@@ -243,6 +287,7 @@ export function AiAssistant() {
       } finally {
         setStreaming(false);
         setStreamText("");
+        setAnnounce("");
         abortRef.current = null;
       }
     },
@@ -263,6 +308,11 @@ export function AiAssistant() {
 
   return (
     <div>
+      {/* Screen-reader live region for streaming responses */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {announce}
+      </div>
+
       {/* Launcher bubble (hidden when disabled in settings) */}
       {perms?.assistant_enabled !== false ? (
         <button
@@ -278,7 +328,7 @@ export function AiAssistant() {
           aria-expanded={open}
           aria-controls="ai-panel"
           aria-label={open ? "Close the AI assistant" : "Open the AI assistant"}
-          className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-accent text-accent-ink shadow-lift transition-transform hover:scale-105 active:scale-95"
+          className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-accent text-accent-ink shadow-lift transition-transform hover:scale-105 active:scale-95 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {open ? (
             <svg viewBox="0 0 24 24" className="size-6" fill="none" aria-hidden="true">
@@ -293,14 +343,11 @@ export function AiAssistant() {
       {/* Backdrop */}
       {open ? (
         <div
-          className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 ${
+          className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 motion-reduce:transition-none ${
             panelVisible ? "opacity-100" : "opacity-0"
           }`}
           onClick={() => {
-            if (!streaming) {
-              setOpen(false);
-              setPanelVisible(false);
-            }
+            if (!streaming) closePanel();
           }}
           aria-hidden="true"
         />
@@ -309,11 +356,14 @@ export function AiAssistant() {
       {/* Panel */}
       {open ? (
         <div
+          ref={panelRef}
           id="ai-panel"
           role="dialog"
           aria-modal="true"
           aria-label="AI assistant"
-          className={`fixed z-50 flex flex-col border-hairline bg-surface-1 shadow-lift transition-transform duration-200 ease-out-expo max-sm:inset-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:border-0 sm:bottom-4 sm:right-4 sm:top-4 sm:w-[420px] sm:rounded-2xl sm:border ${
+          aria-busy={streaming}
+          onKeyDown={trapTab}
+          className={`fixed z-50 flex flex-col border-hairline bg-surface-1 shadow-lift transition-transform duration-200 ease-out-expo motion-reduce:transition-none max-sm:inset-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:border-0 sm:bottom-4 sm:right-4 sm:top-4 sm:w-[420px] sm:rounded-2xl sm:border ${
             panelVisible ? "translate-x-0" : "sm:translate-x-[110%] max-sm:translate-y-2"
           }`}
         >
@@ -343,7 +393,7 @@ export function AiAssistant() {
                     }
                   }
                 }}
-                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high"
+                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 aria-label="Attach a GitHub repository"
                 title="Attach project"
               >
@@ -357,7 +407,7 @@ export function AiAssistant() {
                   setShowModes((v) => !v);
                   setAttachOpen(false);
                 }}
-                className={`rounded-lg p-1.5 hover:bg-surface-2 ${showModes ? "text-accent" : "text-ink-medium hover:text-ink-high"}`}
+                className={`rounded-lg p-1.5 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${showModes ? "text-accent" : "text-ink-medium hover:text-ink-high"}`}
                 aria-label="Switch assistant mode"
                 title={`Mode: ${AI_MODES.find((m) => m.id === mode)?.label}`}
               >
@@ -366,7 +416,7 @@ export function AiAssistant() {
               <button
                 type="button"
                 onClick={() => setShowHistory((v) => !v)}
-                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high"
+                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 aria-label="Toggle conversation history"
                 title="History"
               >
@@ -377,7 +427,7 @@ export function AiAssistant() {
               <button
                 type="button"
                 onClick={newChat}
-                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high"
+                className="rounded-lg p-1.5 text-ink-medium hover:bg-surface-2 hover:text-ink-high focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 aria-label="Start a new chat"
                 title="New chat"
               >
@@ -507,7 +557,7 @@ export function AiAssistant() {
                           setConversations((cs) => cs.filter((x) => x.id !== c.id));
                           if (conversationId === c.id) newChat();
                         }}
-                        className="rounded-lg p-1 text-ink-low opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 focus-visible:opacity-100"
+                        className="rounded-lg p-1 text-ink-low opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                         aria-label={`Delete conversation: ${c.title}`}
                       >
                         <svg viewBox="0 0 24 24" className="size-3.5" fill="none" aria-hidden="true">
@@ -591,7 +641,7 @@ export function AiAssistant() {
                           setCopiedId(m.id);
                           setTimeout(() => setCopiedId(null), 1500);
                         }}
-                        className="rounded-md px-1.5 py-0.5 text-[11px] text-ink-low hover:bg-surface-2 hover:text-ink-high"
+                        className="rounded-md px-1.5 py-0.5 text-[11px] text-ink-low hover:bg-surface-2 hover:text-ink-high focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                         aria-label="Copy response"
                       >
                         {copiedId === m.id ? "Copied" : "Copy"}
@@ -606,13 +656,13 @@ export function AiAssistant() {
               <div className="flex justify-start">
                 <div className="w-full max-w-[95%]">
                   <Markdown>{streamText}</Markdown>
-                  <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-accent align-middle" aria-hidden="true" />
+                  <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-accent align-middle motion-reduce:animate-none" aria-hidden="true" />
                 </div>
               </div>
             ) : null}
 
             {error ? (
-              <div className="rounded-xl border border-danger/30 bg-danger/[0.07] p-3 text-[13px] text-danger">
+              <div role="alert" className="rounded-xl border border-danger/30 bg-danger/[0.07] p-3 text-[13px] text-danger">
                 <p>{error}</p>
                 <div className="mt-2 flex gap-2">
                   <Button
