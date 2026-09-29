@@ -16,6 +16,7 @@
   --color-canvas: hsl(var(--color-canvas));
   --color-canvas-raised: hsl(var(--color-canvas-raised));
   --color-surface: hsl(var(--color-surface));
+  --color-surface-1: hsl(var(--color-surface-1));
   --color-surface-2: hsl(var(--color-surface-2));
   --color-surface-3: hsl(var(--color-surface-3));
   --color-hairline: hsl(var(--color-hairline));
