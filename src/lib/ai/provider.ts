@@ -145,10 +145,17 @@ export async function* streamChat(options: ChatOptions): AsyncGenerator<ChatChun
       withThinking = false;
       res = await attempt(currentModel, withThinking);
     }
-    // Transient provider overload: one short backoff, then a single retry.
+    // Transient provider overload: back off once, then retry — switching to
+    // the fallback model, since overload is often model-specific.
     if ((res.status === 503 || res.status === 500) && !signal?.aborted) {
       await new Promise((r) => setTimeout(r, 900));
-      if (!signal?.aborted) res = await attempt(currentModel, withThinking);
+      if (!signal?.aborted) {
+        if (currentModel !== GEMINI_FALLBACK_MODEL) {
+          currentModel = GEMINI_FALLBACK_MODEL;
+          withThinking = false;
+        }
+        res = await attempt(currentModel, withThinking);
+      }
     }
     if (!res.ok || !res.body) {
       const detail = await res.text().catch(() => "");
