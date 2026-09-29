@@ -203,7 +203,9 @@ export async function POST(req: NextRequest) {
             ? "The AI provider is rate-limiting requests. Try again in a moment."
             : status === 503
               ? "AI is not configured on this deployment yet — add AI_API_KEY (server env)."
-              : status === 400
+              : status === 404
+                ? "The configured AI model isn't available on this provider. Update AI_MODEL to a current model (for Gemini: gemini-2.5-flash)."
+                : status === 400
                 ? "The AI provider rejected the request — the saved API key looks invalid. Re-check AI_API_KEY in the Vercel project settings (a Gemini key is ~39 characters starting with 'AIza')."
                 : "The AI provider request failed. Try again.";
         sse({ type: "error", error: friendly });

@@ -47,7 +47,7 @@ export function getProviderConfig(): ProviderConfig {
   const provider: ProviderName = raw === "openai" || raw === "anthropic" ? raw : "gemini";
   const model =
     process.env.AI_MODEL?.trim() ||
-    (provider === "gemini" ? "gemini-2.0-flash" : provider === "openai" ? "gpt-4o-mini" : "claude-3-5-haiku-latest");
+    (provider === "gemini" ? "gemini-2.5-flash" : provider === "openai" ? "gpt-4o-mini" : "claude-3-5-haiku-latest");
   return { provider, model, hasKey: isAiConfigured() };
 }
 

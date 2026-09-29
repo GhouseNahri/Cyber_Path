@@ -32,7 +32,7 @@ describe("AI provider config", () => {
     vi.stubEnv("AI_API_KEY", "test-key");
     const cfg = getProviderConfig();
     expect(cfg.provider).toBe("gemini");
-    expect(cfg.model).toBe("gemini-2.0-flash");
+    expect(cfg.model).toBe("gemini-2.5-flash");
     expect(cfg.hasKey).toBe(true);
   });
 
@@ -52,7 +52,7 @@ describe("AI provider config", () => {
 describe("streamChat", () => {
   it("streams gemini chunks and maps roles correctly", async () => {
     vi.stubEnv("AI_PROVIDER", "gemini");
-    vi.stubEnv("AI_MODEL", "gemini-2.0-flash");
+    vi.stubEnv("AI_MODEL", "gemini-2.5-flash");
     vi.stubEnv("AI_API_KEY", "test-key");
 
     const fetchMock = vi.fn().mockResolvedValue(sseResponse([GEMINI_CHUNK, GEMINI_CHUNK]));
