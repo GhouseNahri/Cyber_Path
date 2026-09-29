@@ -32,7 +32,7 @@ describe("AI provider config", () => {
     vi.stubEnv("AI_API_KEY", "test-key");
     const cfg = getProviderConfig();
     expect(cfg.provider).toBe("gemini");
-    expect(cfg.model).toBe("gemini-flash-latest");
+    expect(cfg.model).toBe("gemini-3.8-flash");
     expect(cfg.hasKey).toBe(true);
   });
 

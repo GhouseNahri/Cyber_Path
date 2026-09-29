@@ -5,13 +5,13 @@
  * chosen server-side from environment variables, so swapping providers or
  * models later never touches feature code.
  *
- * MODEL STRATEGY (Gemini): the default is Google's rolling alias
- * `gemini-flash-latest`, which always tracks the current flash model, so
- * scheduled model retirements stop breaking the assistant. Stream attempts
- * degrade gracefully: thinking-capable models get `thinkingBudget: 0` (so
- * the output budget is spent on answers, not hidden reasoning), models that
- * reject that field are retried without it, a 404 falls back to
- * `GEMINI_FALLBACK_MODEL`, and transient overload (500/503) is retried once.
+ * MODEL STRATEGY (Gemini): the default tracks Google's current stable
+ * flash model; stream attempts degrade gracefully — thinking-capable
+ * models get `thinkingBudget: 0` (so the output budget is spent on
+ * answers, not hidden reasoning), models that reject that field are
+ * retried without it, a 404 or a model-specific overload falls back to
+ * `GEMINI_FALLBACK_MODEL`. Keep both names current with Google's docs
+ * (ai.google.dev/gemini-api/docs/models) when generations retire.
  *
  * SECURITY: `AI_API_KEY` is a server-only secret. It must never be prefixed
  * with NEXT_PUBLIC_ and never crosses to the client; this module throws if
@@ -56,15 +56,15 @@ export function getProviderConfig(): ProviderConfig {
   const model =
     process.env.AI_MODEL?.trim() ||
     (provider === "gemini"
-      ? "gemini-flash-latest"
+      ? "gemini-3.8-flash"
       : provider === "openai"
         ? "gpt-4o-mini"
         : "claude-3-5-haiku-latest");
   return { provider, model, hasKey: isAiConfigured() };
 }
 
-/** Gemini fallback when the rolling alias is unavailable (rare). */
-export const GEMINI_FALLBACK_MODEL = "gemini-2.5-flash";
+/** Gemini fallback if the primary model is unavailable or overloaded. */
+export const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite";
 
 /** Thrown when the provider returns a non-200; `status` maps to UI states. */
 export class AiProviderError extends Error {
