@@ -1,5 +1,12 @@
 # Cyber_Path — Final Product Review
 
+> **⏳ Historical snapshot (September 2026).** This document describes the state
+> of the project at the end of Phase 18. Development continued after it was
+> written — see the **"Update — September 29, 2026"** addendum at the bottom of
+> this file for what has changed since (achievements, AI assistant, production
+> deployment, migrations, and corrected claims). Facts below superseded by the
+> addendum should be read as historical.
+
 **Phase 18 deliverable · September 2026 · Status: all 18 phases complete**
 
 A personal cybersecurity learning command center: a structured, evidence-based
@@ -211,3 +218,53 @@ revision queue health, low-confidence list. No vanity metrics.
 *Built phase-by-phase with verification gates between every phase. Every
 number in this document reflects the database and code as of the final
 commit: `ce0a20e`.*
+
+---
+
+## Update — September 29, 2026
+
+The claims above were written at the Phase 18 boundary. Several are now
+outdated; this addendum corrects them. Items not mentioned here are unchanged.
+
+**Superseded claims (from §14 and §15):**
+
+- ~~"Achievements engine … was intentionally not built"~~ — **Built.** An
+  achievements system now exists at `/achievements`, backed by the derived
+  engine in `src/lib/ai/achievements.ts` (10 milestones computed from real
+  evidence: streaks, sessions, quizzes, projects, skills — no manual claims).
+- ~~"No rate limiting on server actions"~~ — The AI chat endpoint
+  (`/api/ai/chat`) is now rate-limited at **50 messages / 24 h per user**,
+  enforced server-side. Core server actions remain unthrottled (single-user
+  platform); the original note stands for those.
+- ~~"Portfolio/sitemap use `localhost:3000`"~~ — The site is **deployed to
+  production** on Vercel (https://cyber-path-phi.vercel.app). Sitemap and
+  portfolio URLs resolve against the production base URL, configurable via
+  `NEXT_PUBLIC_SITE_URL`.
+- ~~"Rate limiting middleware once deployed publicly" / "Production
+  deployment: Vercel … and CI"~~ — Both done: Vercel production deployment
+  live, and CI (typecheck → lint → test → build) runs on every push via
+  `.github/workflows/ci.yml`.
+- ~~"Achievements/milestones expansion if wanted"~~ — Delivered as above.
+
+**New capability not in the original review — AI assistant:**
+
+- Ask-AI panel on every topic page plus a standalone assistant surface,
+  backed by `src/lib/ai/provider.ts` — a provider-agnostic streaming layer
+  (Google Gemini first: `gemini-3.8-flash` primary with `gemini-3.5-flash-lite`
+  fallback, one retry on 5xx switching models). Rate-limited as noted above;
+  the key lives only in Vercel env vars, never in the repo.
+- Migrations **0019–0021** extend the DB for AI features (progress reset
+  support, AI assistant tables, AI repo access); all 23 migration ledger
+  entries are registered in `supabase_migrations.schema_migrations`.
+
+**Corrected numbers:**
+
+- Tests: ~~117 unit tests / 12 files~~ → **139 tests across 15 suites**
+  (Vitest), including the AI achievements and provider suites.
+- The Phase 18 QA account has been replaced by
+  `cyberpath.qa.e2e+20260923@gmail.com` (used for production E2E including
+  live AI verification); delete it from Supabase Auth if you want a clean
+  slate.
+
+*Addendum current as of commit `62bb1e1` (model-chain fix). See `git log` for
+anything newer.*
