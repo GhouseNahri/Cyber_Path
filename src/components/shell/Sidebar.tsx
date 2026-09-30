@@ -61,12 +61,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-
-      <div className="border-t border-hairline p-4">
-        <p className="text-[11px] leading-relaxed text-ink-low">
-          Phase 1 — foundation. Auth and data arrive with Supabase in Phases 2–3.
-        </p>
-      </div>
     </aside>
   );
 }
