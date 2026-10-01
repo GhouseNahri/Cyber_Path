@@ -52,6 +52,9 @@ export const SIM_COMMANDS = [
   "find",
   "grep",
   "head",
+  "stat",
+  "wc",
+  "notes",
   "whoami",
   "id",
   "groups",
@@ -283,6 +286,7 @@ function runGrep(state: SimState, argv: string[]): CommandResult {
   }
   const lines = (node.content ?? "").split("\n").filter((l) => l.length > 0);
   const hits = lines.filter((l) => rx.test(l));
+  if (argv.includes("-c")) return { ok: hits.length > 0, output: [String(hits.length)] };
   return { ok: hits.length > 0, output: hits.length > 0 ? hits : ["(no matches)"] };
 }
 
@@ -305,6 +309,46 @@ function runHead(state: SimState, argv: string[]): CommandResult {
 
 function runWhoami(state: SimState): CommandResult {
   return { ok: true, output: [state.user.username] };
+}
+
+// ── stat + wc (analysis helpers for SOC/forensics scenarios) ──────────────
+
+function runStat(state: SimState, argv: string[]): CommandResult {
+  const targetArg = argv[0];
+  if (!targetArg) return { ok: false, output: ["stat: missing file operand"], error: "usage" };
+  const target = normalizePath(state.cwd, targetArg);
+  const node = nodeAtPath(state.root, target);
+  if (!node) return { ok: false, output: [`stat: cannot statx '${targetArg}': No such file or directory`], error: "not found" };
+  if (!canTraverse(state.root, parentPath(target), state.user) || !can(node, state.user, "read")) {
+    return { ok: false, output: [`stat: cannot statx '${targetArg}': Permission denied`], error: "permission denied" };
+  }
+  const size = node.kind === "file" ? (node.content?.length ?? 0) : 4096;
+  const mode = `${node.kind === "directory" ? "d" : "-"}${node.user}${node.group}${node.other}`;
+  const mtime = node.mtime ?? "1970-01-01T00:00:00Z";
+  return {
+    ok: true,
+    output: [
+      `  File: ${target}`,
+      `  Size: ${size}\tType: ${node.kind === "directory" ? "directory" : "regular file"}`,
+      `Access: (${octalOf(node)}/${mode})  Uid: ( ${node.owner} )  Gid: ( ${node.group_name} )`,
+      `Modify: ${mtime}`,
+    ],
+  };
+}
+
+function runWc(state: SimState, argv: string[]): CommandResult {
+  const linesOnly = argv.includes("-l");
+  const fileArg = argv.find((a) => !a.startsWith("-"));
+  if (!fileArg) return { ok: false, output: ["wc: missing file operand"], error: "usage" };
+  const target = normalizePath(state.cwd, fileArg);
+  const node = nodeAtPath(state.root, target);
+  if (!node || node.kind !== "file") return { ok: false, output: [`wc: ${fileArg}: No such file`], error: "not found" };
+  if (!canReadPath(state.root, target, state.user).ok) {
+    return { ok: false, output: [`wc: ${fileArg}: Permission denied`], error: "permission denied" };
+  }
+  const content = node.content ?? "";
+  const lineCount = content.split("\n").filter((l) => l.length > 0).length;
+  return { ok: true, output: [linesOnly ? String(lineCount) : `${lineCount} ${content.length} ${fileArg}`] };
 }
 
 function runId(state: SimState): CommandResult {
@@ -330,23 +374,45 @@ function runHelp(): CommandResult {
       "  pwd                   print working directory",
       "  cat <file>            print file contents",
       "  head [-n N] <file>    first N lines",
+      "  stat <path>           file metadata (size, owner, timestamps)",
+      "  wc [-l] <file>        count lines in a file",
       "  chmod <octal> <path>  change permissions (owner/root only)",
       "  chown <user>[:g] <p>  change ownership (root only)",
       "  chgrp <group> <path>  change group (owner, target group only)",
       "  find [path] -name X   search by name; also -user, -size +Nc",
-      "  grep <pat> <file>     search inside a file",
+      "  grep [-c] <pat> <f>   search inside a file (-c = count only)",
+      "  notes <text>          record an analyst note for the case",
       "  whoami / id / groups  identity",
       "  clear                 clear the screen",
     ],
   };
 }
 
+/** Record an analyst note (simulated case log entry). */
+function runNotes(state: SimState, argv: string[]): CommandResult {
+  void state;
+  const text = argv.join(" ").trim();
+  if (!text) return { ok: false, output: ["notes: record what? usage: notes <your analysis>"], error: "usage" };
+  return { ok: true, output: [`[case note recorded] ${text}`] };
+}
+
 // ── dispatcher ────────────────────────────────────────────────────────────
+
+/** Split a command line into tokens, honoring double-quoted arguments. */
+function tokenize(line: string): string[] {
+  const tokens: string[] = [];
+  const rx = /"([^"]*)"|(\S+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = rx.exec(line)) !== null) {
+    tokens.push(m[1] ?? m[2] ?? "");
+  }
+  return tokens;
+}
 
 export function runCommand(state: SimState, raw: string): CommandResult {
   const line = raw.trim().replace(/\s+/g, " ");
   if (line === "") return { ok: true, output: [] };
-  const [cmd, ...argv] = line.split(" ");
+  const [cmd, ...argv] = tokenize(line);
 
   switch (cmd) {
     case "ls":
@@ -369,6 +435,12 @@ export function runCommand(state: SimState, raw: string): CommandResult {
       return runGrep(state, argv);
     case "head":
       return runHead(state, argv);
+    case "stat":
+      return runStat(state, argv);
+    case "wc":
+      return runWc(state, argv);
+    case "notes":
+      return runNotes(state, argv);
     case "whoami":
       return runWhoami(state);
     case "id":

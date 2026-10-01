@@ -25,6 +25,8 @@ export type FsNode = {
   other: string;
   owner: string;
   group_name: string;
+  /** Modification timestamp (ISO) — used by forensics timelines. */
+  mtime?: string;
   /** Files only. */
   content?: string;
   /** Directories only. */
@@ -63,10 +65,11 @@ export function dir(
   /** Octal mode, e.g. "750". */
   perms: string,
   children: FsNode[] = [],
+  mtime?: string,
 ): FsNode {
   const id = `n${nextId++}`;
   const [user, groupP, other] = octalToTriples(perms);
-  return { id, name, kind: "directory", user, group: groupP, other, owner, group_name: group, children };
+  return { id, name, kind: "directory", user, group: groupP, other, owner, group_name: group, children, mtime };
 }
 
 export function file(
@@ -76,10 +79,11 @@ export function file(
   /** Octal mode, e.g. "640". */
   perms: string,
   content = "",
+  mtime?: string,
 ): FsNode {
   const id = `n${nextId++}`;
   const [user, groupP, other] = octalToTriples(perms);
-  return { id, name, kind: "file", user, group: groupP, other, owner, group_name: group, content };
+  return { id, name, kind: "file", user, group: groupP, other, owner, group_name: group, content, mtime };
 }
 
 // ── Path resolution ───────────────────────────────────────────────────────

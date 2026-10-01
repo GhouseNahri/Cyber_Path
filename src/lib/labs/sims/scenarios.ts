@@ -7,6 +7,7 @@
  * state per user and turns goal success into lab completion.
  */
 import { runCommand, type SimState } from "./commands";
+import { ANALYSIS_SCENARIOS } from "./analysis-scenarios";
 import { dir, file, nodeAtPath, octalOf, resetIds, type FsNode } from "./vfs";
 
 export type SimGoal = {
@@ -202,6 +203,32 @@ function flagCommandResult(state: SimStateWithFlags, res: ReturnType<typeof runC
   }
 }
 
+/**
+ * L3 analysis-scenario flags (SOC / DNS / forensics). Kept here — next to
+ * the dispatcher — rather than in analysis-scenarios.ts, so there is no
+ * import cycle between the two modules.
+ */
+function analysisFlags(state: SimStateWithFlags, raw: string, res: ReturnType<typeof runCommand>): void {
+  const line = raw.trim().toLowerCase();
+  const flags = state.flags ?? (state.flags = {});
+  // SOC: SSH brute-force triage
+  if (res.ok && line.startsWith("grep -c") && line.includes("failed password")) flags.countedFailures = true;
+  if (res.ok && line.startsWith("grep") && line.includes("198.51.100.77")) flags.identifiedAttacker = true;
+  if (res.ok && line.startsWith("grep") && line.includes("accepted")) flags.spottedSuccess = true;
+  if (res.ok && line.startsWith("cat") && line.includes("auth.log")) flags.readSudo = true;
+  if (res.ok && line.startsWith("notes ")) flags.wroteVerdict = true;
+  // DNS: exfiltration hunt
+  if (res.ok && line.startsWith("grep") && line.includes("exfil") && !line.startsWith("grep -c")) flags.noticedBurst = true;
+  if (res.ok && line.startsWith("grep -c") && line.includes("exfil")) flags.countedExfil = true;
+  if (res.ok && line.startsWith("grep") && line.includes("10.0.2.99")) flags.identifiedClient = true;
+  if (res.ok && line.startsWith("cat") && line.includes("dns.log")) flags.sawNormal = true;
+  // Forensics: timeline reconstruction
+  if (res.ok && line.startsWith("stat ")) flags.statedFiles = true;
+  if (res.ok && line.startsWith("cat") && line.includes(".bash_history")) flags.readHistory = true;
+  if (res.ok && line.startsWith("cat") && line.includes("invoice")) flags.firstAction = true;
+  if (res.ok && (line.startsWith("grep") || line.startsWith("cat")) && line.includes("203.0.113.9")) flags.foundC2 = true;
+}
+
 /** Run one command in a scenario, updating flags + returning the result. */
 export function scenarioCommand(
   scenario: SimScenario,
@@ -210,6 +237,7 @@ export function scenarioCommand(
 ): { output: string[]; ok: boolean; state: SimStateWithFlags; goalsDone: string[] } {
   const res = runCommand(state, raw);
   flagCommandResult(state, res, raw);
+  analysisFlags(state, raw, res);
   const next: SimStateWithFlags = res.state ? { ...state, ...res.state } : state;
   const goalsDone = scenario.goals.filter((g) => safeCheck(g.check, next)).map((g) => g.id);
   return { output: res.output, ok: res.ok, state: next, goalsDone };
@@ -226,6 +254,7 @@ function safeCheck(check: (s: SimState) => boolean, s: SimStateWithFlags): boole
 // ── registry ──────────────────────────────────────────────────────────────
 
 export const SIM_SCENARIOS: Record<string, SimScenario> = {
+  ...ANALYSIS_SCENARIOS,
   "linux-permissions": {
     key: "linux-permissions",
     title: "Permission repair drill",
