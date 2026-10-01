@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/profile";
 import {
   filterLabs,
   labStats,
@@ -217,6 +218,12 @@ export function applyFilters(catalog: CatalogLab[], f: LabFilters): CatalogLab[]
 export type LabDetail = {
   lab: CatalogLab;
   tasks: { id: string; position: number; title: string; detail: string | null }[];
+  /** Names for the lab's mapped skills (evidence UI). */
+  skillOptions: { slug: string; name: string }[];
+  /** The user's saved evidence row for this lab, if any (L4). */
+  evidence: { accepted_skills: string[]; body: string } | null;
+  /** The user's saved reflection, if any (L4). */
+  reflection: { did: string; learned: string; confused: string; differently: string } | null;
 };
 
 export type LabDetailData =
@@ -231,21 +238,37 @@ export const getLabDetail = cache(async (slug: string): Promise<LabDetailData> =
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, missingSchema: true };
 
-  const [labRes, tasksRes, topicsRes, skillsRes] = await Promise.all([
+  const [labRes, tasksRes, topicsRes, skillsRes, namesRes] = await Promise.all([
     supabase.from("labs").select("*").eq("slug", slug).eq("is_published", true).maybeSingle(),
     supabase.from("lab_tasks").select("id, position, title, detail").eq("lab_slug", slug).order("position"),
     supabase.from("lab_topics").select("topic_slug").eq("lab_slug", slug),
     supabase.from("lab_skills").select("skill_slug, weight").eq("lab_slug", slug),
+    supabase.from("skills").select("slug, name"),
   ]);
 
   if (labRes.error) return { ok: false, missingSchema: true };
   const raw = labRes.data as unknown as Record<string, unknown> | null;
   if (!raw) return { ok: false, notFound: true };
 
-  const [mineRes] = await Promise.all([
-    supabase.from("user_labs").select("*").eq("user_id", user.id).eq("lab_slug", slug).maybeSingle(),
-  ]);
-  const m = (mineRes.data ?? null) as Record<string, unknown> | null;
+  const { data: mineData } = await supabase
+    .from("user_labs")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("lab_slug", slug)
+    .maybeSingle();
+  const m = (mineData ?? null) as Record<string, unknown> | null;
+
+  // Evidence row (only exists after completion + save).
+  let ev: { accepted_skills: unknown; body: string } | null = null;
+  if (m && typeof m.id === "string") {
+    const { data } = await supabase
+      .from("lab_evidence")
+      .select("accepted_skills, body")
+      .eq("user_id", user.id)
+      .eq("user_lab_id", m.id)
+      .maybeSingle();
+    ev = (data ?? null) as { accepted_skills: unknown; body: string } | null;
+  }
 
   const lab: CatalogLab = {
     slug: String(raw.slug),
@@ -286,6 +309,10 @@ export const getLabDetail = cache(async (slug: string): Promise<LabDetailData> =
       : null,
   };
 
+  const skillNames = new Map(
+    ((namesRes.data ?? []) as { slug: string; name: string }[]).map((s) => [s.slug, s.name]),
+  );
+
   return {
     ok: true,
     detail: {
@@ -296,6 +323,19 @@ export const getLabDetail = cache(async (slug: string): Promise<LabDetailData> =
         title: String(t.title ?? ""),
         detail: typeof t.detail === "string" ? t.detail : null,
       })),
+      skillOptions: lab.skills.map((s) => ({ slug: s.slug, name: skillNames.get(s.slug) ?? s.slug })),
+      evidence: ev
+        ? {
+            accepted_skills: Array.isArray(ev.accepted_skills)
+              ? ev.accepted_skills.filter((s): s is string => typeof s === "string")
+              : [],
+            body: typeof ev.body === "string" ? ev.body : "",
+          }
+        : null,
+      reflection:
+        m && typeof m.reflection === "object" && m.reflection !== null
+          ? (m.reflection as { did: string; learned: string; confused: string; differently: string })
+          : null,
     },
   };
 });

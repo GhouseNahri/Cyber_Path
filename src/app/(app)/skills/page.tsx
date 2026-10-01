@@ -19,6 +19,12 @@ function SkillCard({ skill }: { skill: SkillView }) {
           <p className="text-sm font-semibold text-ink-high">{skill.name}</p>
           <p className="mt-0.5 text-[12px] text-ink-low">
             {skill.topics_completed}/{skill.topics_mapped} topics completed
+            {skill.labs_completed > 0 ? (
+              <>
+                {' '}
+                · <span className="text-ink-medium">{skill.labs_completed} lab{skill.labs_completed === 1 ? "" : "s"} done</span>
+              </>
+            ) : null}
             {skill.projects_completed > 0 ? (
               <>
                 {' '}

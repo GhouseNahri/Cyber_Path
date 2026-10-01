@@ -6,11 +6,16 @@
  * priority desc → score desc → stable insertion order (Array.sort is stable).
  *
  *   due-revision     120  (+4 per day overdue, capped +20)
+ *   retry-lab        110  lab marked revisit — finish what you started
  *   career-next      100  unlocked, not-completed topic in a selected path
  *   in-progress       90  +2 per completed stage
- *   next-unlocked     70  roadmap order
+ *   practice-lab      88  a mapped lab for an in-progress topic (+5 if its
+ *                         Practice stage is still open)
  *   low-confidence    85  completed topic still rated 1–2 (60 + (3 − confidence)×5)
  *   weak-quiz         75  best score < 70 (95 − best_score)
+ *   next-lab          62  a not-started lab whose topics are already open on
+ *                         the roadmap — practical follow-up to current work
+ *   next-unlocked     70  roadmap order
  *   smaller-target     0  fires once when missed-day pattern says planned ≫ actual
  */
 
@@ -21,7 +26,22 @@ export type RecKind =
   | "low_confidence_review"
   | "weak_quiz_retest"
   | "career_next"
-  | "smaller_target";
+  | "smaller_target"
+  | "practice_lab"
+  | "retry_lab"
+  | "next_lab";
+
+/** A lab candidate for the practical-learning recommendation kinds. */
+export type LabCandidate = {
+  slug: string;
+  title: string;
+  status: "not_started" | "in_progress" | "completed" | "revisit" | "abandoned";
+  estimated_minutes: number;
+  /** Mapped roadmap topic slugs. */
+  topics: string[];
+  /** Mapped skill slugs (context for the why-text). */
+  skills: string[];
+};
 
 export type Recommendation = {
   kind: RecKind;
@@ -41,6 +61,8 @@ export type TopicState = {
   locked: boolean;
   /** Completed stage count 0–4. */
   stages_done: number;
+  /** Whether the Practice stage is already ticked (optional for back-compat). */
+  practice_done?: boolean;
   phase_title: string;
   confidence: number | null;
 };
@@ -69,6 +91,8 @@ function phaseNextMap(topics: TopicState[]): Map<string, TopicState> {
 
 export type RecommendInput = {
   topics: TopicState[];
+  /** Lab candidates (optional — older callers simply produce fewer kinds). */
+  labs?: LabCandidate[];
   /** Topic title + days overdue for reviews due today. */
   dueRevisions: { topic_slug: string; title: string; overdue_days: number }[];
   /** Unfinished project slugs, for career-evidence context (reserved). */
@@ -188,7 +212,64 @@ export function recommend(input: RecommendInput): Recommendation[] {
     });
   }
 
-  // 7) Smaller target — at most one, honest sizing advice from real misses.
+  // 7) Labs (L4): practical work mapped to the roadmap.
+  const topicBySlug = new Map(input.topics.map((t) => [t.slug, t]));
+  for (const lab of input.labs ?? []) {
+    const openTopics = lab.topics.filter((slug) => {
+      const t = topicBySlug.get(slug);
+      return !!t && !t.locked && t.status !== "completed";
+    });
+    const mapped = lab.topics
+      .map((slug) => topicBySlug.get(slug))
+      .filter((t): t is TopicState => !!t);
+    const anyUnlocked = mapped.some((t) => !t.locked);
+
+    if (lab.status === "revisit") {
+      out.push({
+        kind: "retry_lab",
+        title: `Finish: ${lab.title}`,
+        why: "You marked this lab to revisit — a focused second pass is where the skill sticks.",
+        href: `/labs/${lab.slug}`,
+        estimated_minutes: lab.estimated_minutes,
+        score: 110,
+      });
+      continue;
+    }
+
+    if (lab.status === "completed" || lab.status === "abandoned") continue;
+
+    const firstOpen = openTopics[0];
+    const target = firstOpen !== undefined ? topicBySlug.get(firstOpen) : undefined;
+    if (target) {
+      const practiceOpen = target.practice_done !== true;
+      out.push({
+        kind: "practice_lab",
+        title: `Practice: ${lab.title}`,
+        why: `Hands-on lab mapped to ${target.title} — the topic you're working through right now.${practiceOpen ? " Its Practice stage is still open." : ""}`,
+        href: `/labs/${lab.slug}`,
+        estimated_minutes: lab.estimated_minutes,
+        score: 88 + (practiceOpen ? 5 : 0),
+      });
+      continue;
+    }
+
+    if ((lab.status === "not_started" || lab.status === "in_progress") && anyUnlocked) {
+      const first = mapped.find((t) => !t.locked) ?? mapped[0];
+      const continuing = lab.status === "in_progress";
+      out.push({
+        kind: "next_lab",
+        title: `${continuing ? "Continue" : "Try"}: ${lab.title}`,
+        why: first
+          ? `Practical follow-up to ${first.title} — the roadmap theory is already open to you.`
+          : "A lab you can work with your current roadmap progress.",
+        href: `/labs/${lab.slug}`,
+        estimated_minutes: lab.estimated_minutes,
+        score: 62,
+      });
+    }
+  }
+
+  // 8) Smaller target — at most one, honest sizing advice from real misses.
   if (input.missed.suggestLowerTarget && input.missed.total >= 3 && input.goalMinutes > 20) {
     const suggested = Math.max(20, Math.round((input.goalMinutes * 2) / 3 / 5) * 5);
     const reasonBit = input.missed.topReasonLabel ? ` Your most common reason: ${input.missed.topReasonLabel}.` : "";

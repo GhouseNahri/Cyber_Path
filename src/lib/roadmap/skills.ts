@@ -12,6 +12,8 @@ export type SkillView = {
   theoryPct: number;
   /** Weighted share of mapped topics with practice/build stages done (0–100). */
   practicalPct: number;
+  /** Completed labs that evidence this skill (L4). */
+  labs_completed: number;
   /** Completed or published projects mapped to this skill. */
   projects_completed: number;
   topics_mapped: number;
@@ -35,7 +37,7 @@ export type SkillsOverview =
 export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
   const supabase = await createClient();
 
-  const [linksRes, skillsRes, progressRes, projectsRes] = await Promise.all([
+  const [linksRes, skillsRes, progressRes, projectsRes, labSkillsRes, myLabsRes] = await Promise.all([
     supabase.from("topic_skills").select("topic_slug, skill_slug, weight"),
     supabase.from("skills").select("slug, name, category").order("category").order("name"),
     supabase.from("user_topic_progress").select("topic_slug, status, stages, confidence"),
@@ -43,6 +45,10 @@ export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
       .from("user_projects")
       .select("idea_slug, project_ideas ( skills )")
       .in("status", ["completed", "published"]),
+    // Labs (L4): completed labs per skill — degraded to empty when the labs
+    // tables are missing, so skills still render.
+    supabase.from("lab_skills").select("lab_slug, skill_slug"),
+    supabase.from("user_labs").select("lab_slug, status").eq("status", "completed"),
   ]);
 
   if (skillsRes.error) return { ok: false, missingSchema: true };
@@ -66,6 +72,20 @@ export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
     for (const s of skillList) {
       if (typeof s !== "string") continue;
       projectsBySkill.set(s, (projectsBySkill.get(s) ?? 0) + 1);
+    }
+  }
+
+  // Lab evidence (L4): completed labs per skill slug.
+  const labsBySkill = new Map<string, number>();
+  if (!labSkillsRes.error && !myLabsRes.error) {
+    const completedSlugs = new Set(
+      ((myLabsRes.data ?? []) as { lab_slug: string | null }[])
+        .map((r) => r.lab_slug)
+        .filter((s): s is string => typeof s === "string"),
+    );
+    for (const r of (labSkillsRes.data ?? []) as unknown as { lab_slug: string; skill_slug: string }[]) {
+      if (!completedSlugs.has(r.lab_slug)) continue;
+      labsBySkill.set(r.skill_slug, (labsBySkill.get(r.skill_slug) ?? 0) + 1);
     }
   }
 
@@ -102,10 +122,17 @@ export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
 
     const projectCount = projectsBySkill.get(skill.slug) ?? 0;
 
+    // Lab evidence (L4): a completed lab is server-validated practical work,
+    // so it counts toward the practical rungs. The demonstrated rung stays
+    // reserved for finished projects and high-confidence completed topics —
+    // labs alone cannot push a skill there.
+    const labsCompleted = labsBySkill.get(skill.slug) ?? 0;
+    const hasPractical = practiced > 0 || labsCompleted > 0;
+
     let level: SkillLevel = "not_started";
-    if (completed > 0 || inProgress > 0 || projectCount > 0) {
-      if (completed === 0 && projectCount === 0) level = "learning";
-      else if (completed < 2 || practiced === 0) level = "practicing";
+    if (completed > 0 || inProgress > 0 || projectCount > 0 || labsCompleted > 0) {
+      if (completed === 0 && projectCount === 0 && labsCompleted === 0) level = "learning";
+      else if (completed < 2 || !hasPractical) level = "practicing";
       else if (confident === 0 && projectCount === 0) level = "competent";
       else level = "demonstrated";
     }
@@ -117,6 +144,7 @@ export const getSkillsOverview = cache(async (): Promise<SkillsOverview> => {
       level,
       theoryPct,
       practicalPct,
+      labs_completed: labsCompleted,
       projects_completed: projectCount,
       topics_mapped: mine.length,
       topics_completed: completed,

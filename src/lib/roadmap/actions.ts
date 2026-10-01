@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { cancelReviews, scheduleFirstReview } from "@/lib/revision/actions";
+import { applyStageToTopic } from "./stage";
 import { STAGE_ORDER, type StageKey } from "./types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -30,39 +31,8 @@ export async function setStage(topicSlug: string, stage: StageKey, done: boolean
   const { supabase, userId } = await requireUser();
   if (!userId) return { ok: false, error: "Your session expired — sign in again." };
 
-  // Current row (or canonical empty default).
-  const { data: existing } = await supabase
-    .from("user_topic_progress")
-    .select("status, stages")
-    .eq("user_id", userId)
-    .eq("topic_slug", topicSlug)
-    .maybeSingle();
-
-  const prev = (existing?.stages ?? {}) as Record<string, unknown>;
-  const stages = {
-    read: stage === "read" ? done : prev.read === true,
-    practice: stage === "practice" ? done : prev.practice === true,
-    test: stage === "test" ? done : prev.test === true,
-    build: stage === "build" ? done : prev.build === true,
-  };
-
-  const allDone = STAGE_ORDER.every((s) => stages[s]);
-  const status = allDone ? "completed" : "in_progress";
-
-  const { error } = await supabase.from("user_topic_progress").upsert(
-    {
-      user_id: userId,
-      topic_slug: topicSlug,
-      status,
-      stages,
-      completed_at: allDone ? new Date().toISOString() : null,
-    },
-    { onConflict: "user_id,topic_slug" },
-  );
-  if (error) return { ok: false, error: "Could not save that. Try again in a moment." };
-
-  // Topic fully completed → schedule its first spaced review (Phase 9).
-  if (allDone) await scheduleFirstReview(supabase, userId, topicSlug);
+  const result = await applyStageToTopic(supabase, userId, topicSlug, stage, done);
+  if (!result.ok) return { ok: false, error: result.error };
 
   revalidateRoadmap(topicSlug);
   return { ok: true };

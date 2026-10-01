@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tickPracticeForLab } from "@/lib/labs/practice-link";
 import { getScenario, scenarioCommand, type SimStateWithFlags } from "./sims/scenarios";
 
 export type SimRunResult =
@@ -125,7 +126,8 @@ export async function runSimCommand(slug: string, raw: string): Promise<SimRunRe
 
   const allDone = result.goalsDone.length === scenario.goals.length;
   if (allDone && row.status !== "completed") {
-    // Auto-complete through the normal tracker flow: status + attempt log.
+    // Auto-complete through the normal tracker flow: status + attempt log
+    // + roadmap Practice stage for labs that map to topics.
     const currentAttempt = (row as unknown as { attempts_count?: number }).attempts_count ?? 1;
     await supabase
       .from("user_labs")
@@ -140,7 +142,9 @@ export async function runSimCommand(slug: string, raw: string): Promise<SimRunRe
       detail: { sim: scenario.key, goals: result.goalsDone },
       completed_at: now,
     });
+    await tickPracticeForLab(supabase, user.id, slug);
     revalidatePath("/labs");
+    revalidatePath("/roadmap");
   }
 
   return {

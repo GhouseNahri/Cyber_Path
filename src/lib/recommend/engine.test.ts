@@ -186,6 +186,98 @@ describe("recommend", () => {
   });
 });
 
+describe("lab recommendation kinds (L4)", () => {
+  const lab = (over: Partial<NonNullable<RecommendInput["labs"]>[number]> & { slug: string }) => ({
+    title: over.slug.replaceAll("-", " "),
+    status: "not_started" as const,
+    estimated_minutes: 30,
+    topics: [],
+    skills: [],
+    ...over,
+  });
+
+  it("recommends a revisit lab ahead of everything except urgent revisions", () => {
+    const recs = recommend({
+      ...baseInput,
+      topics: [tA()],
+      labs: [lab({ slug: "lab-x", status: "revisit", topics: ["topic-a"] })],
+    });
+    expect(recs[0]?.kind).toBe("retry_lab");
+    expect(recs[0]?.score).toBe(110);
+    expect(recs[0]?.href).toBe("/labs/lab-x");
+  });
+
+  it("recommends a practice lab for in-progress topics with a practice-stage bonus", () => {
+    const recs = recommend({
+      ...baseInput,
+      topics: [
+        topic({ slug: "topic-open", status: "in_progress", stages_done: 1 }),
+        topic({ slug: "topic-practiced", status: "in_progress", stages_done: 2, practice_done: true }),
+      ],
+      labs: [
+        lab({ slug: "lab-open", topics: ["topic-open"] }),
+        lab({ slug: "lab-done-practice", topics: ["topic-practiced"] }),
+      ],
+    });
+    const practice = recs.filter((r) => r.kind === "practice_lab");
+    expect(practice).toHaveLength(2);
+    // 88 + 5 when the topic's Practice stage is still open; 88 when it is done.
+    expect(practice[0]?.title).toBe("Practice: lab open");
+    expect(practice[0]?.score).toBe(93);
+    expect(practice[1]?.score).toBe(88);
+  });
+
+  it("suggests next labs only when their topics are unlocked and not completed", () => {
+    const recs = recommend({
+      ...baseInput,
+      topics: [
+        topic({ slug: "done-topic", status: "completed", stages_done: 4 }),
+        topic({ slug: "locked-topic", locked: true }),
+      ],
+      labs: [
+        lab({ slug: "lab-on-done", topics: ["done-topic"] }),
+        lab({ slug: "lab-on-locked", topics: ["locked-topic"] }),
+        lab({ slug: "lab-on-done-too", status: "in_progress", topics: ["done-topic"] }),
+      ],
+    });
+    // lab-on-done: topics complete → openTopics empty → falls to next_lab (62).
+    // lab-on-locked: only mapped topic is locked → anyUnlocked false → skipped.
+    // lab-on-done-too: in_progress status → also next_lab (completed/abandoned are skipped).
+    const kinds = recs.filter((r) => r.kind === "next_lab").map((r) => r.href);
+    expect(kinds).toEqual(["/labs/lab-on-done", "/labs/lab-on-done-too"]);
+    expect(recs.some((r) => r.href === "/labs/lab-on-locked")).toBe(false);
+  });
+
+  it("never recommends completed or abandoned labs", () => {
+    const recs = recommend({
+      ...baseInput,
+      topics: [tA()],
+      labs: [
+        lab({ slug: "lab-done", status: "completed", topics: ["topic-a"] }),
+        lab({ slug: "lab-gone", status: "abandoned", topics: ["topic-a"] }),
+      ],
+    });
+    expect(recs.filter((r) => r.href?.startsWith("/labs/"))).toEqual([]);
+  });
+
+  it("ranks retry_lab above practice_lab and practice_lab above next_lab", () => {
+    const recs = recommend({
+      ...baseInput,
+      topics: [
+        topic({ slug: "topic-a", status: "in_progress", stages_done: 1 }),
+        topic({ slug: "done-topic", status: "completed", stages_done: 4 }),
+      ],
+      labs: [
+        lab({ slug: "lab-next", topics: ["done-topic"] }),
+        lab({ slug: "lab-practice", status: "in_progress", topics: ["topic-a"] }),
+        lab({ slug: "lab-retry", status: "revisit", topics: ["topic-a"] }),
+      ],
+    });
+    const labRecs = recs.filter((r) => r.href?.startsWith("/labs/"));
+    expect(labRecs.map((r) => r.kind)).toEqual(["retry_lab", "practice_lab", "next_lab"]);
+  });
+});
+
 describe("humanizeReason", () => {
   it("converts snake_case labels", () => {
     expect(humanizeReason("no_time")).toBe("No Time");

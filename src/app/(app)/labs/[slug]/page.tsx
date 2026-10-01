@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, CardHeader, EmptyState, type BadgeTone } from "@/components/ui";
+import { LabAskMentorButton } from "@/components/labs/LabAskMentorButton";
+import { LabEvidencePanel } from "@/components/labs/LabEvidencePanel";
+import { LabReflectionForm } from "@/components/labs/LabReflectionForm";
 import { LabStatusControls } from "@/components/labs/LabStatusControls";
 import { LabWorkbench } from "@/components/labs/LabWorkbench";
 import { SimTerminal } from "@/components/labs/SimTerminal";
@@ -41,7 +44,7 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
     );
   }
 
-  const { lab, tasks } = data.detail;
+  const { lab, tasks, skillOptions, evidence, reflection } = data.detail;
   const mine = lab.mine;
 
   // Topic titles for cross-links (best-effort; unknown slugs are skipped).
@@ -52,6 +55,19 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
       for (const t of p.topics) topicMeta.set(t.slug, { title: t.title, locked: t.locked });
     }
   }
+
+  // Sim context resolved once: the terminal needs the scenario, the AI-mentor
+  // button needs the goals the user hasn't hit yet.
+  const simKey = lab.completion.mode === "sim" ? lab.completion.sim_key : null;
+  const scenario = simKey ? getScenario(simKey) : null;
+  let simGoals: { id: string; description: string; done: boolean }[] = [];
+  if (scenario) {
+    const goalsRes = await getSimGoals(lab.slug);
+    simGoals = goalsRes.ok
+      ? goalsRes.goals
+      : scenario.goals.map((g) => ({ id: g.id, description: g.description, done: false }));
+  }
+  const stuckOn = simGoals.filter((g) => !g.done).map((g) => g.description);
 
   return (
     <div className="space-y-6">
@@ -87,6 +103,9 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
           <Card>
             <CardHeader title="Objective" subtitle="What done looks like" />
             <p className="text-sm leading-relaxed text-ink-high">{lab.objective}</p>
+            <div className="mt-3">
+              <LabAskMentorButton labTitle={lab.title} objective={lab.objective} stuckOn={stuckOn} />
+            </div>
           </Card>
 
           {lab.instructions ? (
@@ -134,6 +153,14 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
                 </p>
               ) : null}
             </Card>
+          ) : null}
+
+          {mine?.status === "completed" ? (
+            <section aria-label="After the lab" className="space-y-4">
+              <h2 className="font-display text-lg font-semibold tracking-tight">After the lab</h2>
+              <LabEvidencePanel userLabId={mine.id} skillOptions={skillOptions} initial={evidence} />
+              <LabReflectionForm userLabId={mine.id} initial={reflection} />
+            </section>
           ) : null}
         </div>
 
@@ -185,41 +212,29 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
       </div>
 
       {lab.completion.mode === "sim" ? (
-        <SimSection slug={lab.slug} simKey={lab.completion.sim_key} completed={mine?.status === "completed"} />
+        scenario ? (
+          <section aria-label="Simulation" className="space-y-3">
+            <h2 className="font-display text-lg font-semibold tracking-tight">Simulation — {scenario.title}</h2>
+            <SimTerminal
+              slug={lab.slug}
+              brief={scenario.brief}
+              notes={scenario.notes}
+              initialGoals={simGoals}
+              initialHistory={[]}
+              promptUser={scenario.initial().user.username}
+              completed={mine?.status === "completed"}
+            />
+          </section>
+        ) : (
+          <Card>
+            <EmptyState
+              title="Simulation coming soon"
+              body="This lab's simulation is not registered yet — it will appear here once shipped."
+              className="border-none bg-transparent"
+            />
+          </Card>
+        )
       ) : null}
     </div>
-  );
-}
-
-/** Server-rendered sim section: resolves the scenario + current goals, then mounts the terminal. */
-async function SimSection({ slug, simKey, completed }: { slug: string; simKey: string; completed: boolean }) {
-  const scenario = getScenario(simKey);
-  if (!scenario) {
-    return (
-      <Card>
-        <EmptyState
-          title="Simulation coming soon"
-          body="This lab's simulation is not registered yet — it will appear here once shipped."
-          className="border-none bg-transparent"
-        />
-      </Card>
-    );
-  }
-  const goalsRes = await getSimGoals(slug);
-  const goals = goalsRes.ok ? goalsRes.goals : scenario.goals.map((g) => ({ id: g.id, description: g.description, done: false }));
-
-  return (
-    <section aria-label="Simulation" className="space-y-3">
-      <h2 className="font-display text-lg font-semibold tracking-tight">Simulation — {scenario.title}</h2>
-      <SimTerminal
-        slug={slug}
-        brief={scenario.brief}
-        notes={scenario.notes}
-        initialGoals={goals}
-        initialHistory={[]}
-        promptUser={scenario.initial().user.username}
-        completed={completed}
-      />
-    </section>
   );
 }

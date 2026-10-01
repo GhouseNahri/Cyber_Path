@@ -7,7 +7,7 @@ import { getCareerData } from "@/lib/career/queries";
 import { missedPatterns, quizStats, weakByConfidence, type QuizTopicStat } from "@/lib/analytics/engine";
 import { MISSED_REASON_LABELS } from "@/lib/streak/messages";
 import { dayKeyFor, dayKeyRange } from "@/lib/session/day";
-import { recommend, humanizeReason, type RecommendInput, type Recommendation, type TopicState } from "./engine";
+import { recommend, humanizeReason, type LabCandidate, type RecommendInput, type Recommendation, type TopicState } from "./engine";
 
 export type RecommendData =
   | { ok: true; todayKey: string; recs: Recommendation[] }
@@ -108,8 +108,43 @@ export const getRecommendations = cache(async (): Promise<RecommendData> => {
       humanizeReason(missed.topReason.category)
     : null;
 
+  // Lab candidates (L4): published labs + the user's tracker rows + mappings.
+  // Degrades to no lab recommendations when the labs tables are missing.
+  const [labsRes, labTopicsRes, mineLabsRes] = await Promise.all([
+    supabase.from("labs").select("slug, title, estimated_minutes, difficulty").eq("is_published", true),
+    supabase.from("lab_topics").select("lab_slug, topic_slug"),
+    supabase.from("user_labs").select("lab_slug, status").eq("user_id", profile.id),
+  ]);
+
+  const topicsByLab = new Map<string, string[]>();
+  if (!labTopicsRes.error) {
+    for (const r of labTopicsRes.data ?? []) {
+      const list = topicsByLab.get(r.lab_slug) ?? [];
+      list.push(r.topic_slug);
+      topicsByLab.set(r.lab_slug, list);
+    }
+  }
+  const statusByLab = new Map<string, string>();
+  if (!mineLabsRes.error) {
+    for (const r of mineLabsRes.data ?? []) {
+      if (typeof r.lab_slug === "string") statusByLab.set(r.lab_slug, r.status);
+    }
+  }
+
+  const labs: LabCandidate[] = ((labsRes.data ?? []) as { slug: string; title: string; estimated_minutes: number }[]).map(
+    (l) => ({
+      slug: l.slug,
+      title: l.title,
+      status: (statusByLab.get(l.slug) ?? "not_started") as LabCandidate["status"],
+      estimated_minutes: l.estimated_minutes ?? 60,
+      topics: topicsByLab.get(l.slug) ?? [],
+      skills: [],
+    }),
+  );
+
   const input: RecommendInput = {
     topics,
+    labs,
     dueRevisions,
     weakQuizTopics,
     lowConfidenceTopics,

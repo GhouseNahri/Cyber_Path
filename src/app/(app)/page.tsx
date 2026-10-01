@@ -274,11 +274,14 @@ export default async function DashboardPage() {
 /** Rank badge tone per recommendation kind. */
 const KIND_META: Record<RecKind, { label: string; tone: "accent" | "warn" | "info" | "ok" }> = {
   due_revision: { label: "Revision due", tone: "warn" },
+  retry_lab: { label: "Lab revisit", tone: "warn" },
   career_next: { label: "Career path", tone: "accent" },
   continue_topic: { label: "In progress", tone: "info" },
+  practice_lab: { label: "Practice lab", tone: "accent" },
   start_topic: { label: "Up next", tone: "info" },
   low_confidence_review: { label: "Confidence check", tone: "warn" },
   weak_quiz_retest: { label: "Retest", tone: "warn" },
+  next_lab: { label: "Lab", tone: "info" },
   smaller_target: { label: "Target", tone: "ok" },
 };
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tickPracticeForLab } from "@/lib/labs/practice-link";
 import {
   canTransitionLab,
   parseLabStatus,
@@ -92,7 +93,7 @@ export async function setLabStatus(userLabId: string, status: string): Promise<L
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("user_labs")
-    .select("id, status, times_revisited")
+    .select("id, status, times_revisited, lab_slug")
     .eq("id", userLabId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -111,6 +112,11 @@ export async function setLabStatus(userLabId: string, status: string): Promise<L
 
   const { error } = await supabase.from("user_labs").update(patch).eq("id", userLabId).eq("user_id", user.id);
   if (error) return { ok: false, error: "Could not update the lab. Try again in a moment." };
+
+  // Completing a roadmap-linked lab ticks its topics' Practice stage.
+  if (to === "completed" && row.lab_slug) {
+    await tickPracticeForLab(supabase, user.id, row.lab_slug);
+  }
 
   revalidateLabs();
   return { ok: true };
@@ -144,6 +150,107 @@ export async function toggleLabTask(userLabId: string, index: number, total: num
   if (error) return { ok: false, error: "Could not update tasks. Try again in a moment." };
 
   revalidateLabs();
+  return { ok: true };
+}
+
+/**
+ * Save the structured reflection captured at/after completion (L4).
+ * Private to the user — feeds future recommendations, never the portfolio.
+ */
+export async function saveLabReflection(
+  userLabId: string,
+  reflection: { did: string; learned: string; confused: string; differently: string },
+): Promise<LabActionResult> {
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "Your session expired - sign in again." };
+
+  const clean = {
+    did: (reflection.did ?? "").trim().slice(0, 2000),
+    learned: (reflection.learned ?? "").trim().slice(0, 2000),
+    confused: (reflection.confused ?? "").trim().slice(0, 2000),
+    differently: (reflection.differently ?? "").trim().slice(0, 2000),
+  };
+  if (!clean.did && !clean.learned && !clean.confused && !clean.differently) {
+    return { ok: false, error: "Write at least one field before saving." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("user_labs")
+    .update({ reflection: clean, updated_at: new Date().toISOString() })
+    .eq("id", userLabId)
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: "Could not save the reflection. Try again in a moment." };
+
+  revalidateLabs();
+  return { ok: true };
+}
+
+/**
+ * Record which skills the completed lab evidenced (L4). Accepted skills feed
+ * the skills engine's practical evidence — only for labs the user completed.
+ */
+export async function saveLabEvidence(
+  userLabId: string,
+  input: { acceptedSkills: string[]; body?: string },
+): Promise<LabActionResult> {
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "Your session expired - sign in again." };
+  if (!Array.isArray(input.acceptedSkills)) return { ok: false, error: "No skills selected." };
+  const accepted = input.acceptedSkills
+    .filter((s): s is string => typeof s === "string" && s.length > 0 && s.length <= 80)
+    .slice(0, 12);
+
+  const supabase = await createClient();
+  // The tracker row must exist, belong to the user, and be completed —
+  // evidence only counts for work the server validated as done.
+  const { data: row } = await supabase
+    .from("user_labs")
+    .select("id, status, lab_slug")
+    .eq("id", userLabId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "Lab not found." };
+  if (row.status !== "completed") {
+    return { ok: false, error: "Complete the lab first — evidence follows demonstrated work." };
+  }
+
+  // Intersect with the lab's actual mapped skills (no claiming random skills).
+  const { data: labSkills } = await supabase
+    .from("lab_skills")
+    .select("skill_slug")
+    .eq("lab_slug", row.lab_slug ?? "");
+  const allowed = new Set(((labSkills ?? []) as { skill_slug: string }[]).map((r) => r.skill_slug));
+  const valid = accepted.filter((s) => allowed.has(s));
+
+  const { data: existing } = await supabase
+    .from("lab_evidence")
+    .select("id")
+    .eq("user_lab_id", userLabId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from("lab_evidence")
+      .update({ accepted_skills: valid, body: (input.body ?? "").trim().slice(0, 5000) })
+      .eq("id", (existing as { id: string }).id)
+      .eq("user_id", user.id);
+    if (error) return { ok: false, error: "Could not save the evidence. Try again in a moment." };
+  } else {
+    const { error } = await supabase.from("lab_evidence").insert({
+      user_id: user.id,
+      user_lab_id: userLabId,
+      kind: "note",
+      title: "Skills demonstrated",
+      body: (input.body ?? "").trim().slice(0, 5000),
+      accepted_skills: valid,
+    });
+    if (error) return { ok: false, error: "Could not save the evidence. Try again in a moment." };
+  }
+
+  revalidateLabs();
+  revalidatePath("/skills");
   return { ok: true };
 }
 
