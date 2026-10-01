@@ -14,11 +14,13 @@ const RESET_PATHS = [
   "/history",
   "/skills",
   "/library",
+  "/labs",
   "/analytics",
   "/quiz",
   "/projects",
   "/career",
   "/career/[slug]",
+  "/portfolio/[username]",
   "/settings",
 ];
 
@@ -38,6 +40,8 @@ export type ResetSummary = {
   missed_days: number;
   quiz_attempts: number;
   topic_reviews: number;
+  labs: number;
+  lab_sim_states: number;
   projects: number;
   notes: number;
   bookmarks: number;

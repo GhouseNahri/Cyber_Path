@@ -12,6 +12,7 @@ type Stage = "closed" | "scope" | "confirm" | "busy" | "done" | "error";
 
 const CORE_LIST = [
   "Roadmap progress — topic status, stages and confidence ratings",
+  "Labs — tracker, completions, attempts, evidence and simulations",
   "Daily tasks — today's mission and all generated history",
   "Study sessions — history, durations and counts",
   "Streaks — computed from sessions/tasks, so they restart at zero",
@@ -31,6 +32,8 @@ type OptionalKey = (typeof OPTIONAL_LIST)[number]["key"];
 
 const SUMMARY_ROWS: { key: keyof ResetSummary; label: string }[] = [
   { key: "topic_progress", label: "topic progress rows" },
+  { key: "labs", label: "lab tracker rows (with attempts + evidence)" },
+  { key: "lab_sim_states", label: "saved simulation states" },
   { key: "daily_tasks", label: "daily tasks" },
   { key: "study_sessions", label: "study sessions" },
   { key: "missed_days", label: "missed days" },
@@ -162,7 +165,8 @@ export function DangerZone() {
 
                 <p className="mt-4 rounded-lg border border-hairline bg-surface-2/60 p-3 text-xs leading-relaxed text-ink-medium">
                   Never deleted: your account and login, profile and onboarding choices, theme,
-                  GitHub connection, and all roadmap/content data (shared by everyone).
+                  GitHub connection, your public-portfolio setting, and all roadmap/lab content
+                  (shared by everyone).
                 </p>
 
                 <div className="mt-5 flex justify-end gap-2">
