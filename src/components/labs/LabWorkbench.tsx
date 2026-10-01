@@ -149,6 +149,7 @@ export function LabWorkbench({
       <Card>
         <CardHeader title="Working notes" subtitle="Private — commands that worked, dead ends, evidence" />
         <textarea
+          aria-label="Working notes (private)"
           value={noteText}
           onChange={(e) => setNoteText(e.target.value)}
           rows={6}

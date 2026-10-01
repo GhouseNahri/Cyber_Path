@@ -4,8 +4,9 @@ import { useState, useTransition } from "react";
 import { Button, Card, CardHeader } from "@/components/ui";
 import { saveLabEvidence } from "@/lib/labs/actions";
 
-/** Post-lab skills evidence (L4): the user confirms which of the lab's mapped
- *  skills they actually demonstrated. Only completed labs can save. */
+/** Post-lab skills evidence (L4/L5): the user confirms which of the lab's
+ *  mapped skills they actually demonstrated, and can opt each evidence row
+ *  into the public portfolio. Only completed labs can save. */
 export function LabEvidencePanel({
   userLabId,
   skillOptions,
@@ -13,11 +14,12 @@ export function LabEvidencePanel({
 }: {
   userLabId: string;
   skillOptions: { slug: string; name: string }[];
-  initial: { accepted_skills: string[]; body: string } | null;
+  initial: { accepted_skills: string[]; body: string; visibility: string } | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [accepted, setAccepted] = useState<string[]>(initial?.accepted_skills ?? []);
   const [body, setBody] = useState(initial?.body ?? "");
+  const [toPortfolio, setToPortfolio] = useState(initial?.visibility === "portfolio");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +32,7 @@ export function LabEvidencePanel({
     setError(null);
     setSaved(false);
     startTransition(async () => {
-      const res = await saveLabEvidence(userLabId, { acceptedSkills: accepted, body });
+      const res = await saveLabEvidence(userLabId, { acceptedSkills: accepted, body, visibility: toPortfolio ? "portfolio" : "private" });
       if (res.ok) setSaved(true);
       else setError(res.error ?? "Could not save the evidence.");
     });
@@ -64,9 +66,10 @@ export function LabEvidencePanel({
           This lab has no mapped skills yet — your reflection below still counts.
         </p>
       )}
-      <label className="mt-3 block">
+      <label htmlFor="lab-evidence-body" className="mt-3 block">
         <span className="mb-1 block text-[13px] font-medium text-ink-high">Anything to show for it? (optional)</span>
         <textarea
+          id="lab-evidence-body"
           value={body}
           rows={3}
           maxLength={5000}
@@ -77,6 +80,25 @@ export function LabEvidencePanel({
           }}
           className="w-full rounded-lg border border-hairline bg-canvas px-3 py-2.5 text-[13px] leading-relaxed text-ink-high placeholder:text-ink-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         />
+      </label>
+      <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-hairline bg-canvas px-3 py-2.5 transition-colors hover:border-ink-low">
+        <input
+          type="checkbox"
+          checked={toPortfolio}
+          disabled={pending}
+          onChange={(e) => {
+            setToPortfolio(e.target.checked);
+            setSaved(false);
+          }}
+          className="mt-0.5 size-4 accent-accent"
+        />
+        <span className="text-[13px] leading-relaxed text-ink-high">
+          Show this on my public portfolio
+          <span className="mt-0.5 block text-[12px] text-ink-medium">
+            Off stays private. On, visitors see the title, this text and the ticked skill names — never your notes,
+            reflections or attempt history.
+          </span>
+        </span>
       </label>
       {error ? (
         <p role="alert" className="mt-2 text-[13px] text-danger">

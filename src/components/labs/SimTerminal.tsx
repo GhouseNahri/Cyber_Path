@@ -96,7 +96,13 @@ export function SimTerminal({
         <ul className="mt-2.5 space-y-1.5">
           {goals.map((g) => (
             <li key={g.id} className="flex items-start gap-2.5 text-sm">
-              <span aria-hidden className={`mt-0.5 font-mono ${g.done ? "text-ok" : "text-ink-low"}`}>
+              <span
+                role="checkbox"
+                aria-checked={g.done}
+                aria-label={`${g.description} — ${g.done ? "complete" : "not complete"}`}
+                tabIndex={0}
+                className={`mt-0.5 font-mono ${g.done ? "text-ok" : "text-ink-low"}`}
+              >
                 {g.done ? "[x]" : "[ ]"}
               </span>
               <span className={g.done ? "text-ink-medium line-through decoration-hairline" : "text-ink-high"}>

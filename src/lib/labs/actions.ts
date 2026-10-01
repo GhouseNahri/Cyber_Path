@@ -164,11 +164,14 @@ export async function saveLabReflection(
   const user = await requireUser();
   if (!user) return { ok: false, error: "Your session expired - sign in again." };
 
+  // Coerce every field to a string first — a malformed payload must never
+  // throw inside the action; it just saves as empty.
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
   const clean = {
-    did: (reflection.did ?? "").trim().slice(0, 2000),
-    learned: (reflection.learned ?? "").trim().slice(0, 2000),
-    confused: (reflection.confused ?? "").trim().slice(0, 2000),
-    differently: (reflection.differently ?? "").trim().slice(0, 2000),
+    did: str(reflection.did).trim().slice(0, 2000),
+    learned: str(reflection.learned).trim().slice(0, 2000),
+    confused: str(reflection.confused).trim().slice(0, 2000),
+    differently: str(reflection.differently).trim().slice(0, 2000),
   };
   if (!clean.did && !clean.learned && !clean.confused && !clean.differently) {
     return { ok: false, error: "Write at least one field before saving." };
@@ -189,10 +192,12 @@ export async function saveLabReflection(
 /**
  * Record which skills the completed lab evidenced (L4). Accepted skills feed
  * the skills engine's practical evidence — only for labs the user completed.
+ * `visibility` is an explicit per-row opt-in for the public portfolio (L5);
+ * private remains the default and the only value ever inferred.
  */
 export async function saveLabEvidence(
   userLabId: string,
-  input: { acceptedSkills: string[]; body?: string },
+  input: { acceptedSkills: string[]; body?: string; visibility?: string },
 ): Promise<LabActionResult> {
   const user = await requireUser();
   if (!user) return { ok: false, error: "Your session expired - sign in again." };
@@ -200,6 +205,7 @@ export async function saveLabEvidence(
   const accepted = input.acceptedSkills
     .filter((s): s is string => typeof s === "string" && s.length > 0 && s.length <= 80)
     .slice(0, 12);
+  const evidenceBody = (typeof input.body === "string" ? input.body : "").trim().slice(0, 5000);
 
   const supabase = await createClient();
   // The tracker row must exist, belong to the user, and be completed —
@@ -223,6 +229,9 @@ export async function saveLabEvidence(
   const allowed = new Set(((labSkills ?? []) as { skill_slug: string }[]).map((r) => r.skill_slug));
   const valid = accepted.filter((s) => allowed.has(s));
 
+  // Only 'private' or 'portfolio' — anything else falls back to private.
+  const visibility = input.visibility === "portfolio" ? "portfolio" : "private";
+
   const { data: existing } = await supabase
     .from("lab_evidence")
     .select("id")
@@ -233,7 +242,11 @@ export async function saveLabEvidence(
   if (existing) {
     const { error } = await supabase
       .from("lab_evidence")
-      .update({ accepted_skills: valid, body: (input.body ?? "").trim().slice(0, 5000) })
+      .update({
+        accepted_skills: valid,
+        body: evidenceBody,
+        visibility,
+      })
       .eq("id", (existing as { id: string }).id)
       .eq("user_id", user.id);
     if (error) return { ok: false, error: "Could not save the evidence. Try again in a moment." };
@@ -243,8 +256,9 @@ export async function saveLabEvidence(
       user_lab_id: userLabId,
       kind: "note",
       title: "Skills demonstrated",
-      body: (input.body ?? "").trim().slice(0, 5000),
+      body: evidenceBody,
       accepted_skills: valid,
+      visibility,
     });
     if (error) return { ok: false, error: "Could not save the evidence. Try again in a moment." };
   }
@@ -342,7 +356,7 @@ export async function addCustomLab(input: {
   const user = await requireUser();
   if (!user) return { ok: false, error: "Your session expired - sign in again." };
 
-  const title = (input.title ?? "").trim();
+  const title = (typeof input.title === "string" ? input.title : "").trim();
   if (title.length < 2 || title.length > 160) {
     return { ok: false, error: "Give the lab a name (2-160 characters)." };
   }
@@ -350,7 +364,7 @@ export async function addCustomLab(input: {
   if (type === "simulation" || type === "sandbox") {
     return { ok: false, error: "Built-in and sandboxed labs cannot be added manually." };
   }
-  const url = (input.externalUrl ?? "").trim();
+  const url = (typeof input.externalUrl === "string" ? input.externalUrl : "").trim();
   if (url && !url.startsWith("https://")) {
     return { ok: false, error: "Links must be https:// URLs." };
   }
@@ -360,9 +374,9 @@ export async function addCustomLab(input: {
     user_id: user.id,
     title,
     lab_type: type,
-    provider: (input.provider ?? "").trim().slice(0, 120),
+    provider: (typeof input.provider === "string" ? input.provider : "").trim().slice(0, 120),
     external_url: url || null,
-    category_slug: input.categorySlug || null,
+    category_slug: typeof input.categorySlug === "string" && input.categorySlug ? input.categorySlug : null,
     status: "not_started",
   });
   if (error) {

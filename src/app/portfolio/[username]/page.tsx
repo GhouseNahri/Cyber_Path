@@ -13,6 +13,17 @@ type PortfolioRow = {
   finished_projects: { title: string; status: string; github_url: string | null; demo_url: string | null; completed_at: string | null }[];
   selected_paths: { name: string }[];
   skill_evidence: { name: string; level: string }[];
+  labs_completed: { title: string; lab_type: string; completed_at: string | null }[];
+  lab_evidence: { title: string; body: string; skills: { name: string }[] }[];
+};
+
+const LAB_TYPE_SHORT: Record<string, string> = {
+  simulation: "simulation",
+  sandbox: "sandbox",
+  external: "provider lab",
+  ctf: "CTF",
+  home_lab: "home lab",
+  custom: "custom lab",
 };
 
 const LEVEL_TONE: Record<string, "neutral" | "info" | "accent" | "ok"> = {
@@ -106,6 +117,55 @@ export default async function PublicPortfolioPage({ params }: { params: Promise<
           </ul>
         )}
       </section>
+
+      {/* Completed labs (L5) — server-validated completions only. */}
+      <section className="mt-10" aria-label="Labs completed">
+        <h2 className="font-display text-lg font-semibold tracking-tight">Labs completed</h2>
+        {row.labs_completed.length === 0 ? (
+          <p className="mt-2 text-[13px] text-ink-low">No labs completed yet.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {row.labs_completed.map((l) => (
+              <li
+                key={`${l.title}-${l.completed_at ?? ""}`}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-hairline bg-surface-2/40 px-4 py-2.5"
+              >
+                <p className="text-[14px] font-medium text-ink-high">{l.title}</p>
+                <div className="flex items-center gap-2">
+                  <Badge tone="neutral">{LAB_TYPE_SHORT[l.lab_type] ?? l.lab_type}</Badge>
+                  {l.completed_at ? (
+                    <span className="font-mono text-[11px] text-ink-low">{l.completed_at.slice(0, 10)}</span>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Shared evidence (L5) — only rows the owner explicitly made public. */}
+      {row.lab_evidence.length > 0 ? (
+        <section className="mt-10" aria-label="Shared evidence">
+          <h2 className="font-display text-lg font-semibold tracking-tight">Evidence I chose to share</h2>
+          <ul className="mt-3 space-y-3">
+            {row.lab_evidence.map((e) => (
+              <li key={`${e.title}-${e.body.slice(0, 24)}`} className="rounded-xl border border-hairline bg-surface-2/40 p-4">
+                <p className="text-[14px] font-medium text-ink-high">{e.title}</p>
+                {e.body ? <p className="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-ink-medium">{e.body}</p> : null}
+                {e.skills.length > 0 ? (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {e.skills.map((s) => (
+                      <Badge key={s.name} tone="ok">
+                        {s.name}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* Skill evidence */}
       <section className="mt-10" aria-label="Skills">

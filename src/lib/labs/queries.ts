@@ -220,8 +220,8 @@ export type LabDetail = {
   tasks: { id: string; position: number; title: string; detail: string | null }[];
   /** Names for the lab's mapped skills (evidence UI). */
   skillOptions: { slug: string; name: string }[];
-  /** The user's saved evidence row for this lab, if any (L4). */
-  evidence: { accepted_skills: string[]; body: string } | null;
+  /** The user's saved evidence row for this lab, if any (L4/L5). */
+  evidence: { accepted_skills: string[]; body: string; visibility: string } | null;
   /** The user's saved reflection, if any (L4). */
   reflection: { did: string; learned: string; confused: string; differently: string } | null;
 };
@@ -259,15 +259,15 @@ export const getLabDetail = cache(async (slug: string): Promise<LabDetailData> =
   const m = (mineData ?? null) as Record<string, unknown> | null;
 
   // Evidence row (only exists after completion + save).
-  let ev: { accepted_skills: unknown; body: string } | null = null;
+  let ev: { accepted_skills: unknown; body: string; visibility: string } | null = null;
   if (m && typeof m.id === "string") {
     const { data } = await supabase
       .from("lab_evidence")
-      .select("accepted_skills, body")
+      .select("accepted_skills, body, visibility")
       .eq("user_id", user.id)
       .eq("user_lab_id", m.id)
       .maybeSingle();
-    ev = (data ?? null) as { accepted_skills: unknown; body: string } | null;
+    ev = (data ?? null) as { accepted_skills: unknown; body: string; visibility: string } | null;
   }
 
   const lab: CatalogLab = {
@@ -330,6 +330,7 @@ export const getLabDetail = cache(async (slug: string): Promise<LabDetailData> =
               ? ev.accepted_skills.filter((s): s is string => typeof s === "string")
               : [],
             body: typeof ev.body === "string" ? ev.body : "",
+            visibility: ev.visibility === "portfolio" ? "portfolio" : "private",
           }
         : null,
       reflection:
