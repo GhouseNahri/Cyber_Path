@@ -6,6 +6,7 @@ export type { BadgeTone } from "./Badge";
 export { StatCard } from "./StatCard";
 export { ProgressRing } from "./ProgressRing";
 export { ProgressBar } from "./ProgressBar";
+export { Input } from "./Input";
 export { EmptyState } from "./EmptyState";
 export { ErrorState } from "./ErrorState";
 export { SkeletonLine, SkeletonBlock, DashboardSkeleton } from "./Skeleton";
