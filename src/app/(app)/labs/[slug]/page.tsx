@@ -3,8 +3,11 @@ import { notFound } from "next/navigation";
 import { Badge, Card, CardHeader, EmptyState, type BadgeTone } from "@/components/ui";
 import { LabStatusControls } from "@/components/labs/LabStatusControls";
 import { LabWorkbench } from "@/components/labs/LabWorkbench";
+import { SimTerminal } from "@/components/labs/SimTerminal";
 import { StartLabButton } from "@/components/labs/StartLabButton";
 import { getLabDetail } from "@/lib/labs/queries";
+import { getSimGoals } from "@/lib/labs/sim";
+import { getScenario } from "@/lib/labs/sims/scenarios";
 import { formatLabMinutes, LAB_DIFFICULTY_LABEL, LAB_TYPE_LABEL } from "@/lib/labs/engine";
 import { getRoadmapOverview } from "@/lib/roadmap/queries";
 
@@ -158,12 +161,16 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
                   <p className="font-mono text-[11px] text-ink-low">completed {mine.completed_at.slice(0, 10)}</p>
                 ) : null}
               </div>
+            ) : lab.completion.mode === "sim" ? (
+              <p className="text-[13px] leading-relaxed text-ink-medium">
+                This is a built-in simulation — just start typing in the terminal below. Your tracker row is created automatically.
+              </p>
             ) : (
               <StartLabButton slug={lab.slug} />
             )}
           </Card>
 
-          {mine ? (
+          {mine && lab.completion.mode !== "sim" ? (
             <LabWorkbench
               userLabId={mine.id}
               tasks={tasks}
@@ -176,6 +183,43 @@ export default async function LabDetailPage({ params }: { params: Promise<{ slug
           ) : null}
         </div>
       </div>
+
+      {lab.completion.mode === "sim" ? (
+        <SimSection slug={lab.slug} simKey={lab.completion.sim_key} completed={mine?.status === "completed"} />
+      ) : null}
     </div>
+  );
+}
+
+/** Server-rendered sim section: resolves the scenario + current goals, then mounts the terminal. */
+async function SimSection({ slug, simKey, completed }: { slug: string; simKey: string; completed: boolean }) {
+  const scenario = getScenario(simKey);
+  if (!scenario) {
+    return (
+      <Card>
+        <EmptyState
+          title="Simulation coming soon"
+          body="This lab's simulation is not registered yet — it will appear here once shipped."
+          className="border-none bg-transparent"
+        />
+      </Card>
+    );
+  }
+  const goalsRes = await getSimGoals(slug);
+  const goals = goalsRes.ok ? goalsRes.goals : scenario.goals.map((g) => ({ id: g.id, description: g.description, done: false }));
+
+  return (
+    <section aria-label="Simulation" className="space-y-3">
+      <h2 className="font-display text-lg font-semibold tracking-tight">Simulation — {scenario.title}</h2>
+      <SimTerminal
+        slug={slug}
+        brief={scenario.brief}
+        notes={scenario.notes}
+        initialGoals={goals}
+        initialHistory={[]}
+        promptUser={scenario.initial().user.username}
+        completed={completed}
+      />
+    </section>
   );
 }
