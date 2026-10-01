@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { Badge, Card, CardHeader, EmptyState, ProgressBar, StatCard } from "@/components/ui";
 import { DailyBarChart, ReasonBars, WeeklyBarChart } from "@/components/analytics/Charts";
+import { LabTypeBars, MonthlyLabBars, SkillGrowthChart } from "@/components/analytics/LabsCharts";
 import { getAnalyticsData } from "@/lib/analytics/queries";
+import { getLabsAnalytics, type LabsAnalytics } from "@/lib/analytics/labs-queries";
+import { formatLabMinutes } from "@/lib/labs/engine";
 import { MISSED_REASON_LABELS } from "@/lib/streak/messages";
 
 export const metadata = { title: "Analytics" };
@@ -21,7 +24,7 @@ function fmtMinutes(m: number): string {
 }
 
 export default async function AnalyticsPage() {
-  const data = await getAnalyticsData();
+  const [data, labsData] = await Promise.all([getAnalyticsData(), getLabsAnalytics()]);
 
   if (!data.ok) {
     return (
@@ -48,7 +51,8 @@ export default async function AnalyticsPage() {
     data.quiz.totalAttempts > 0 ||
     data.missed.total > 0 ||
     data.revision.completed > 0 ||
-    data.tasksCompleted30 > 0;
+    data.tasksCompleted30 > 0 ||
+    labsData.summary.tracked > 0;
 
   return (
     <div className="space-y-6">
@@ -198,6 +202,9 @@ export default async function AnalyticsPage() {
         </Card>
       </section>
 
+      {/* ── Labs analytics (L5) ─────────────────────────────────── */}
+      <LabsAnalyticsSection labs={labsData} />
+
       {/* ── Missed-day patterns ─────────────────────────────────── */}
       <section aria-labelledby="patterns" className="space-y-4">
         <h2 id="patterns" className="font-display text-lg font-semibold tracking-tight">
@@ -252,6 +259,94 @@ export default async function AnalyticsPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/**
+ * Labs analytics section (L5). Renders only when the labs tables are
+ * reachable and the user tracks at least one lab — no vanity zeros.
+ */
+function LabsAnalyticsSection({ labs }: { labs: LabsAnalytics }) {
+  if (!labs.available || labs.summary.tracked === 0) return null;
+
+  const s = labs.summary;
+  return (
+    <section aria-labelledby="labs-analytics" className="space-y-4">
+      <h2 id="labs-analytics" className="font-display text-lg font-semibold tracking-tight">
+        Labs
+      </h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Labs completed" value={String(s.completed)} hint={`${s.tracked} tracked`} />
+        <StatCard label="Time on labs" value={formatLabMinutes(s.minutesTotal)} hint={`${s.active} still open`} />
+        <StatCard label="Avg per completed lab" value={formatLabMinutes(s.avgMinutesPerCompleted)} hint="completed labs only" />
+        <StatCard label="Skills evidenced" value={String(labs.growth.at(-1)?.skills ?? 0)} hint="distinct, from labs" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader title="Completed labs — last 6 months" subtitle="Months with no completions stay empty on purpose" />
+          {labs.monthly.every((b) => b.completed === 0) ? (
+            <EmptyState
+              title="No completions yet"
+              body="Finish a lab and this chart starts tracking your monthly rhythm."
+              className="border-none bg-transparent"
+            />
+          ) : (
+            <MonthlyLabBars buckets={labs.monthly} />
+          )}
+        </Card>
+        <Card>
+          <CardHeader title="Where the time went" subtitle="Completed labs by type" />
+          {labs.typeMix.length === 0 ? (
+            <EmptyState
+              title="Nothing completed yet"
+              body="Complete your first lab to see the split across simulations, CTFs and home labs."
+              className="border-none bg-transparent"
+            />
+          ) : (
+            <LabTypeBars mix={labs.typeMix} />
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader title="Skill growth over time" subtitle="Bars: cumulative labs · Line: distinct skills evidenced" />
+          {(labs.growth.at(-1)?.labs ?? 0) === 0 ? (
+            <EmptyState
+              title="No lab evidence yet"
+              body="Completing labs grows the skills your evidence confirms."
+              className="border-none bg-transparent"
+            />
+          ) : (
+            <SkillGrowthChart points={labs.growth} />
+          )}
+        </Card>
+        <Card>
+          <CardHeader title="Strongest skills" subtitle="Most confirmed by completed labs" />
+          {labs.top.length === 0 ? (
+            <EmptyState
+              title="No confirmed skills yet"
+              body="Labs you complete confirm the skills they map to — strongest first here."
+              className="border-none bg-transparent"
+            />
+          ) : (
+            <ul className="divide-y divide-hairline">
+              {labs.top.map((t) => (
+                <li key={t.slug} className="flex items-center justify-between gap-3 py-2.5">
+                  <Link href="/skills" className="min-w-0 text-[13px] font-medium text-ink-high hover:text-accent hover:underline">
+                    {t.name}
+                  </Link>
+                  <Badge tone="ok">
+                    {t.labs} lab{t.labs === 1 ? "" : "s"}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+    </section>
   );
 }
 
