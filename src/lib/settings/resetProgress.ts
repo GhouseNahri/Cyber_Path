@@ -15,6 +15,7 @@ const RESET_PATHS = [
   "/skills",
   "/library",
   "/labs",
+  "/labs/[slug]",
   "/analytics",
   "/quiz",
   "/projects",

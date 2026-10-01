@@ -17,7 +17,7 @@ export async function GET() {
   }
 
   const uid = user.id;
-  const [profile, progress, tasks, sessions, missed, notes, bookmarks, resourceStatus, reviews, projects] = await Promise.all([
+  const [profile, progress, tasks, sessions, missed, notes, bookmarks, resourceStatus, reviews, projects, labs, labAttempts, labEvidence, aiConversations] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
     supabase.from("user_topic_progress").select("*").eq("user_id", uid),
     supabase.from("daily_tasks").select("*").eq("user_id", uid),
@@ -28,9 +28,13 @@ export async function GET() {
     supabase.from("user_resource_status").select("*").eq("user_id", uid),
     supabase.from("topic_reviews").select("*").eq("user_id", uid),
     supabase.from("user_projects").select("*").eq("user_id", uid),
+    supabase.from("user_labs").select("*").eq("user_id", uid),
+    supabase.from("lab_attempts").select("*").eq("user_id", uid),
+    supabase.from("lab_evidence").select("*").eq("user_id", uid),
+    supabase.from("ai_conversations").select("*").eq("user_id", uid),
   ]);
 
-  const errors = [profile.error, progress.error, tasks.error, sessions.error, missed.error, notes.error, bookmarks.error, resourceStatus.error, reviews.error, projects.error]
+  const errors = [profile.error, progress.error, tasks.error, sessions.error, missed.error, notes.error, bookmarks.error, resourceStatus.error, reviews.error, projects.error, labs.error, labAttempts.error, labEvidence.error, aiConversations.error]
     .filter(Boolean)
     .length;
   if (errors > 0) {
@@ -40,7 +44,7 @@ export async function GET() {
   const payload = {
     exported_at: new Date().toISOString(),
     app: "Cyber_Path",
-    format_version: 1,
+    format_version: 2,
     profile: profile.data,
     topic_progress: progress.data ?? [],
     daily_tasks: tasks.data ?? [],
@@ -51,6 +55,11 @@ export async function GET() {
     resource_statuses: resourceStatus.data ?? [],
     topic_reviews: reviews.data ?? [],
     projects: projects.data ?? [],
+    labs: labs.data ?? [],
+    lab_attempts: labAttempts.data ?? [],
+    lab_evidence: labEvidence.data ?? [],
+    // Sim positions are machine state, not human-readable data — excluded.
+    ai_conversations: aiConversations.data ?? [],
   };
 
   const date = new Date().toISOString().slice(0, 10);

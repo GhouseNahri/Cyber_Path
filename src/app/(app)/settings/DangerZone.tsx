@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { Input } from "@/components/ui/Input";
+import { HoldButton } from "@/components/ui/HoldButton";
 import { resetProgress, type ResetSummary } from "@/lib/settings/resetProgress";
-
-const CONFIRM_TEXT = "RESET";
 
 type Stage = "closed" | "scope" | "confirm" | "busy" | "done" | "error";
 
@@ -55,7 +53,6 @@ export function DangerZone() {
     resetBookmarks: false,
     resetResources: false,
   });
-  const [confirmText, setConfirmText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ResetSummary | null>(null);
 
@@ -73,7 +70,6 @@ export function DangerZone() {
 
   function openScope() {
     setError(null);
-    setConfirmText("");
     setStage("scope");
   }
 
@@ -83,9 +79,11 @@ export function DangerZone() {
     setError(null);
   }
 
-  async function onConfirm(e: FormEvent) {
-    e.preventDefault();
-    if (confirmText !== CONFIRM_TEXT || stage === "busy") return;
+  /** Fired exactly once by the HoldButton when the 2-second hold completes.
+   *  The button's own single-fire guard plus this stage transition prevent
+   *  any duplicate reset requests. */
+  async function onHoldComplete() {
+    if (stage === "busy") return;
     setStage("busy");
     setError(null);
     const res = await resetProgress(opts);
@@ -180,33 +178,44 @@ export function DangerZone() {
               </form>
             ) : null}
 
-            {stage === "confirm" || stage === "busy" ? (
-              <form onSubmit={onConfirm}>
+            {stage === "confirm" ? (
+              <div>
                 <h3 id="reset-dialog-title" className="font-display text-lg font-semibold text-ink-high">
                   Confirm reset
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-ink-medium">
                   {optionalSelected ? "You included optional data. " : null}
-                  Type <span className="font-mono font-semibold text-danger">{CONFIRM_TEXT}</span> to confirm.
+                  Press and hold the button for two seconds. Release early and nothing happens.
                 </p>
-                <Input
-                  label={`Type "${CONFIRM_TEXT}" to confirm`}
-                  value={confirmText}
-                  onChange={(e) => setConfirmText(e.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="mt-4"
-                />
                 {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
-                <div className="mt-5 flex justify-end gap-2">
-                  <Button type="button" variant="ghost" disabled={stage === "busy"} onClick={() => setStage("scope")}>
+                <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+                  <Button type="button" variant="ghost" onClick={() => setStage("scope")}>
                     Back
                   </Button>
-                  <Button type="submit" variant="danger" disabled={confirmText !== CONFIRM_TEXT || stage === "busy"}>
-                    {stage === "busy" ? "Resetting…" : "Reset everything selected"}
-                  </Button>
+                  <HoldButton
+                    doneLabel="Progress Reset"
+                    holdTime={2000}
+                    releaseTime={200}
+                    pressScale={0.97}
+                    wave
+                    waveAmplitude={6}
+                    glow
+                    resetAfter={1200}
+                    onHold={onHoldComplete}
+                  >
+                    Hold to Reset Progress
+                  </HoldButton>
                 </div>
-              </form>
+              </div>
+            ) : null}
+
+            {stage === "busy" ? (
+              <div aria-live="assertive">
+                <h3 id="reset-dialog-title" className="font-display text-lg font-semibold text-ink-high">
+                  Resetting…
+                </h3>
+                <p className="mt-2 text-sm text-ink-medium">Resetting your progress — this takes only a moment. Do not close this window.</p>
+              </div>
             ) : null}
 
             {stage === "done" ? (
