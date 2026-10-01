@@ -182,8 +182,9 @@ export function skillGrowth(
   return keys.map((key) => {
     // Everything completed up to the end of this month folds in here —
     // including work from before the window (first point carries it).
-    const next = done[cursor];
-    while (next && next.mk <= key) {
+    for (;;) {
+      const next = done[cursor];
+      if (!next || next.mk > key) break;
       labs += 1;
       for (const s of skillsByLab.get(next.slug) ?? []) seenSkills.add(s);
       cursor += 1;
