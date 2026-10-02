@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Button } from "@/components/ui";
+import { AIAssistantButton } from "./AIAssistantButton";
 import { Markdown } from "./Markdown";
 import {
   createConversation,
@@ -313,31 +314,20 @@ export function AiAssistant() {
         {announce}
       </div>
 
-      {/* Launcher bubble (hidden when disabled in settings) */}
+      {/* Launcher (hidden when disabled in settings) — slingshot primitive.
+          All AI logic stays in this file; the button only toggles the panel. */}
       {perms?.assistant_enabled !== false ? (
-        <button
-          type="button"
-          onClick={() => {
+        <AIAssistantButton
+          buttonRef={launcherRef}
+          open={open}
+          onToggle={() => {
             if (open) {
-              setOpen(false);
-              setPanelVisible(false);
+              closePanel();
             } else {
               void openPanel();
             }
           }}
-          aria-expanded={open}
-          aria-controls="ai-panel"
-          aria-label={open ? "Close the AI assistant" : "Open the AI assistant"}
-          className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-accent text-accent-ink shadow-lift transition-transform hover:scale-105 active:scale-95 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {open ? (
-            <svg viewBox="0 0 24 24" className="size-6" fill="none" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <span aria-hidden="true" className="text-xl">🤖</span>
-          )}
-        </button>
+        />
       ) : null}
 
       {/* Backdrop */}
