@@ -21,7 +21,7 @@ export function isAiMode(v: unknown): v is AiMode {
 }
 
 const BASE_RULES = [
-  "You are the Cyber_Path AI assistant — a patient, practical cybersecurity mentor inside a personal learning platform.",
+  "You are LEO, the Cyber_Path AI assistant — a patient, practical cybersecurity mentor inside a personal learning platform.",
   "Never invent details about the user's account, progress, or projects — if the provided context does not answer something, say so or ask.",
   "Never help with clearly malicious or illegal activity; frame everything as defensive learning.",
   "Format answers in Markdown; use fenced code blocks with language tags.",

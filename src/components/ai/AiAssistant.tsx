@@ -34,7 +34,7 @@ const TOPIC_ACTIONS: { label: string; prompt: (title: string) => string }[] = [
   { label: "Challenge", prompt: (t) => `Give me a tricky scenario question on "${t}" and walk through the reasoning after I answer.` },
 ];
 
-/** Floating AI assistant: launcher bubble + slide-in panel.
+/** Floating LEO assistant (Cyber_Path AI): launcher bubble + slide-in panel.
  *  Desktop: right-side panel. Mobile (<sm): full-screen sheet.
  *  Any page can summon it via the `cyberpath:ai-ask` CustomEvent
  *  (detail: { message?, topicSlug?, topicTitle? }). */
@@ -228,7 +228,7 @@ export function AiAssistant() {
         if (!res.ok || !res.body) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
           if (res.status === 503) setNotConfigured(true);
-          setError(body.error ?? "The assistant is unavailable right now.");
+          setError(body.error ?? "LEO is unavailable right now.");
           setStreaming(false);
           return;
         }
@@ -283,7 +283,7 @@ export function AiAssistant() {
         if ((err as Error)?.name === "AbortError") {
           // Stopped by the user — partial text was already committed above.
         } else {
-          setError("Network error — the assistant is unreachable. Try again.");
+          setError("Network error — LEO is unreachable. Try again.");
         }
       } finally {
         setStreaming(false);
@@ -350,7 +350,7 @@ export function AiAssistant() {
           id="ai-panel"
           role="dialog"
           aria-modal="true"
-          aria-label="AI assistant"
+          aria-label="LEO AI Assistant"
           aria-busy={streaming}
           onKeyDown={trapTab}
           className={`fixed z-50 flex flex-col border-hairline bg-surface-1 shadow-lift transition-transform duration-200 ease-out-expo motion-reduce:transition-none max-sm:inset-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:border-0 sm:bottom-4 sm:right-4 sm:top-4 sm:w-[420px] sm:rounded-2xl sm:border ${
@@ -359,11 +359,26 @@ export function AiAssistant() {
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-hairline px-4 py-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <span aria-hidden="true">🤖</span>
-              <h2 className="font-display text-[15px] font-semibold text-ink-high">AI Assistant</h2>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!streaming) closePanel();
+                }}
+                aria-label="Close LEO AI Assistant"
+                title="Close (Esc)"
+                className="-ml-1.5 rounded-lg p-2 text-ink-medium hover:bg-surface-2 hover:text-ink-high active:bg-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden="true">
+                  <path d="M19 12H5m7-7-7 7 7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <div className="min-w-0">
+                <h2 className="font-display text-[15px] font-semibold leading-tight text-ink-high">LEO</h2>
+                <p className="text-[10px] uppercase tracking-[0.08em] leading-tight text-ink-low">Cyber_Path AI</p>
+              </div>
               {activeTopicTitle ? (
-                <span className="truncate rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">{activeTopicTitle}</span>
+                <span className="min-w-0 truncate rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">{activeTopicTitle}</span>
               ) : null}
             </div>
             <div className="flex items-center gap-1">
@@ -699,8 +714,8 @@ export function AiAssistant() {
                   }
                 }}
                 rows={Math.min(4, Math.ceil(input.length / 40) || 1)}
-                placeholder="Ask anything…"
-                aria-label="Message the AI assistant"
+                placeholder="Ask LEO…"
+                aria-label="Message LEO"
                 disabled={perms?.assistant_enabled === false}
                 className="max-h-28 min-h-11 w-full resize-none rounded-xl border border-hairline bg-surface-2/70 px-3.5 py-2.5 text-sm text-ink-high placeholder:text-ink-low focus:border-accent/50 focus:outline-none disabled:opacity-50"
               />

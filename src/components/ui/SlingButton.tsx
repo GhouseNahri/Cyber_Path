@@ -18,10 +18,12 @@
  *     launcher needs this to move focus back to itself when the panel closes.
  *  3. `ariaExpanded` / `ariaControls` props added — the AI launcher must keep
  *     its `aria-expanded` / `aria-controls="ai-panel"` disclosure contract.
- *  4. **Viewport clamp.** Upstream lets the pad travel up to `maxPull` px in
- *     any direction, which pushes it off-screen for a control pinned to the
- *     bottom-right corner. Pull offsets are now clamped per axis to the space
- *     actually available at pointer-down.
+ *  4. **Directional viewport clamp.** Upstream lets the pad travel up to
+ *     `maxPull` px in any direction, which pushes it off-screen for a control
+ *     pinned to the bottom-right corner. Travel is now limited along the pull
+ *     ray to the space actually available in that direction: full elastic
+ *     range away from the corner, a few honest pixels toward the edges, and
+ *     the pull (and therefore launch) direction is never distorted.
  *  5. `overscroll-behavior: contain` on the root, so a drag can never trigger
  *     page scroll or iOS rubber-banding.
  *  6. `rounded-full` restored under `:focus-visible` — the repo's global focus
@@ -87,6 +89,7 @@ interface Grip {
   hist: Sample[];
   rawOrigin: { x: number; y: number };
   slop: number;
+  pointerType: string;
 }
 
 const GAP = 4;
@@ -170,8 +173,9 @@ const SlingButton: React.FC<SlingButtonProps> = ({
   const iconRef = useRef<HTMLSpanElement>(null);
   const grip = useRef<Grip | null>(null);
   const dir = useRef({ ux: 0, uy: -1 });
-  /** Per-axis travel budget measured at pointer-down (change #4). */
-  const room = useRef({ x: 0, y: 0 });
+  /** Distance the pad centre may travel along each screen axis before the pad
+   *  itself would leave the viewport, measured at pointer-down (change #4). */
+  const room = useRef({ left: 0, right: 0, top: 0, bottom: 0 });
   const animX = useRef<AnimationPlaybackControls | null>(null);
   const animY = useRef<AnimationPlaybackControls | null>(null);
   const armedRef = useRef(false);
@@ -316,8 +320,10 @@ const SlingButton: React.FC<SlingButtonProps> = ({
       }, 200);
       return;
     }
-    animX.current = animate(px, 0, { type: 'spring', duration: 0.4, bounce: recoil, velocity: v0.x });
-    animY.current = animate(py, 0, { type: 'spring', duration: 0.4, bounce: recoil, velocity: v0.y });
+    // A touch slower and springier than upstream's 0.4s: the settle should
+    // read as an elastic snap-back, not a quick fade to rest.
+    animX.current = animate(px, 0, { type: 'spring', duration: 0.55, bounce: recoil, velocity: v0.x });
+    animY.current = animate(py, 0, { type: 'spring', duration: 0.55, bounce: recoil, velocity: v0.y });
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -333,13 +339,19 @@ const SlingButton: React.FC<SlingButtonProps> = ({
     const dNow = Math.hypot(x, y);
     const dClamped = Math.min(dNow, 0.95 * R);
     const rawNow = dNow > 0.5 ? (R * dClamped) / (R - dClamped) : 0;
-    // How far the pad may travel before its visual (radius H) leaves the
-    // viewport. Measured once per gesture so the clamp never jitters.
+    // How far the pad may travel along each screen axis before the pad itself
+    // (radius padR, plus a small margin) would leave the viewport. Measured
+    // once per gesture so the clamp never jitters. The limits are directional:
+    // a corner-pinned control keeps its full travel away from the corner and
+    // only the few pixels it actually has toward the edges.
     const cx = rect.left + size / 2;
     const cy = rect.top + size / 2;
+    const edge = padR + 6;
     room.current = {
-      x: Math.max(0, Math.min(cx - H, window.innerWidth - cx - H)),
-      y: Math.max(0, Math.min(cy - H, window.innerHeight - cy - H))
+      left: Math.max(0, cx - edge),
+      right: Math.max(0, window.innerWidth - cx - edge),
+      top: Math.max(0, cy - edge),
+      bottom: Math.max(0, window.innerHeight - cy - edge)
     };
     grip.current = {
       id: e.pointerId,
@@ -349,7 +361,8 @@ const SlingButton: React.FC<SlingButtonProps> = ({
       moved: false,
       hist: [],
       rawOrigin: dNow > 0.5 ? { x: (rawNow * x) / dNow, y: (rawNow * y) / dNow } : { x: 0, y: 0 },
-      slop: e.pointerType === 'touch' ? SLOP.coarse : SLOP.fine
+      slop: e.pointerType === 'touch' ? SLOP.coarse : SLOP.fine,
+      pointerType: e.pointerType
     };
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -372,13 +385,23 @@ const SlingButton: React.FC<SlingButtonProps> = ({
     const ux = rx / raw;
     const uy = ry / raw;
     dir.current = { ux, uy };
-    // Per-axis clamp: the pad can never be dragged past the viewport edge.
-    px.set(clamp(d * ux, -room.current.x, room.current.x));
-    py.set(clamp(d * uy, -room.current.y, room.current.y));
+    // Directional clamp: limit travel along the pull ray only as far as the
+    // pad stays on-screen. Limiting per direction (never per axis against the
+    // smaller side) keeps the pull — and therefore the launch direction —
+    // faithful, and leaves open space fully draggable.
+    const tMax = Math.min(
+      ux > 0 ? room.current.right / ux : ux < 0 ? room.current.left / -ux : Infinity,
+      uy > 0 ? room.current.bottom / uy : uy < 0 ? room.current.top / -uy : Infinity
+    );
+    const dv = Math.min(d, tMax);
+    px.set(dv * ux);
+    py.set(dv * uy);
     const t = performance.now();
-    g.hist.push({ x: d * ux, y: d * uy, t });
+    // Velocity history tracks the *visual* position, so release velocity
+    // always matches what the user saw, never the raw finger travel.
+    g.hist.push({ x: dv * ux, y: dv * uy, t });
     while (g.hist.length > 4 || t - (g.hist[0]?.t ?? t) > 80) g.hist.shift();
-    const isArmed = d >= ARM;
+    const isArmed = dv >= ARM;
     if (isArmed !== armedRef.current) {
       armedRef.current = isArmed;
       setArmed(isArmed);
@@ -408,10 +431,12 @@ const SlingButton: React.FC<SlingButtonProps> = ({
         }
       }
     }
+    // Fingers get a harder cap than mice/trackpads, which can flick faster.
+    const cap = g.pointerType === 'mouse' ? HAND_MAX : FINGER_MAX;
     const fm = Math.hypot(vx, vy);
-    if (fm > FINGER_MAX) {
-      vx *= FINGER_MAX / fm;
-      vy *= FINGER_MAX / fm;
+    if (fm > cap) {
+      vx *= cap / fm;
+      vy *= cap / fm;
     }
     if (!g.moved) {
       relaxIcon();
@@ -495,7 +520,7 @@ const SlingButton: React.FC<SlingButtonProps> = ({
           />
         </g>
         <circle
-          className="[fill:var(--sl-well)] [transition:fill_200ms_ease] group-data-[sent]/root:[fill:var(--sl-accent)]"
+          className="[fill:var(--sl-well)] [stroke:var(--sl-band)] [stroke-opacity:0.35] [stroke-width:1] [transition:fill_200ms_ease] group-data-[sent]/root:[fill:var(--sl-accent)]"
           r={wellR}
         />
         <circle
@@ -517,7 +542,7 @@ const SlingButton: React.FC<SlingButtonProps> = ({
           aria-hidden="true"
         />
       ))}
-      <motion.span className="absolute inset-0" style={{ transform: padT }}>
+      <motion.span className="absolute inset-0 will-change-transform" style={{ transform: padT }}>
         <button
           ref={padRef}
           type="button"
@@ -542,7 +567,7 @@ const SlingButton: React.FC<SlingButtonProps> = ({
             if (!disabled) onSend?.();
           }}
         >
-          <span className="flex h-full w-full items-center justify-center rounded-full [background:var(--sl-pad)] [color:var(--sl-icon)] [transition:transform_160ms_cubic-bezier(0.23,1,0.32,1)] group-data-[held]/pad:scale-[0.97] group-data-[armed]/pad:scale-[1.04] [@media(hover:hover)_and_(pointer:fine)]:group-hover/pad:group-not-data-[held]/pad:group-not-aria-disabled/pad:scale-[1.02] motion-reduce:transition-none motion-reduce:transform-none!">
+          <span className="flex h-full w-full items-center justify-center rounded-full [background:var(--sl-pad)] [color:var(--sl-icon)] [transition:transform_160ms_cubic-bezier(0.23,1,0.32,1),box-shadow_160ms_cubic-bezier(0.23,1,0.32,1)] group-data-[held]/pad:scale-[0.97] group-data-[armed]/pad:scale-[1.04] group-data-[armed]/pad:[box-shadow:0_0_0_2px_color-mix(in_oklab,var(--sl-accent)_55%,transparent),0_0_18px_color-mix(in_oklab,var(--sl-accent)_40%,transparent)] [@media(hover:hover)_and_(pointer:fine)]:group-hover/pad:group-not-data-[held]/pad:group-not-aria-disabled/pad:scale-[1.02] motion-reduce:transition-none motion-reduce:transform-none!">
             <span ref={iconRef} className="inline-flex will-change-transform">
               {children ?? <DefaultArrow px={Math.round(size * 0.4)} />}
             </span>

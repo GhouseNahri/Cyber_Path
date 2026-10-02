@@ -4,7 +4,7 @@ import type { Ref } from 'react';
 import SlingButton from '@/components/ui/SlingButton';
 
 /**
- * AIAssistantButton — the Cyber_Path launcher for the global AI assistant.
+ * AIAssistantButton — the launcher for LEO, the Cyber_Path AI assistant.
  *
  * Deliberately thin. It owns three things and nothing else:
  *   1. the AI icon (a sparkle, not a "send message" arrow),
@@ -18,6 +18,12 @@ import SlingButton from '@/components/ui/SlingButton';
  * `maxPull` is the largest the corner has room for, `armAt` is reachable with
  * a thumb, and `particles` is dialled back from 14 so the burst reads as a
  * deliberate flourish rather than a demo.
+ *
+ * Colours follow the elastic metaphor in brand tones: the base band is a
+ * translucent signal-teal (clearly visible on both canvases), the charged
+ * band / power arc / particles take the violet accent, and the well sits one
+ * surface step above the canvas with a faint band-coloured ring so it reads
+ * as a recess without shouting.
  */
 export type AIAssistantButtonProps = {
   /** Whether the AI panel is currently open — swaps the icon and the label. */
@@ -35,7 +41,7 @@ export function AIAssistantButton({ open, onToggle, buttonRef }: AIAssistantButt
     // position utilities would resolve by stylesheet order, not class order.
     <div className="fixed bottom-8 right-5 z-40">
       <SlingButton
-        ariaLabel={open ? 'Close the Cyber_Path AI Assistant' : 'Open the Cyber_Path AI Assistant'}
+        ariaLabel={open ? 'Close LEO — Cyber_Path AI Assistant' : 'Open LEO — Cyber_Path AI Assistant'}
         ariaExpanded={open}
         ariaControls="ai-panel"
         onSend={onToggle}
@@ -45,7 +51,7 @@ export function AIAssistantButton({ open, onToggle, buttonRef }: AIAssistantButt
         armAt={44}
         maxPull={110}
         launchSpeed={2600}
-        recoil={0.2}
+        recoil={0.3}
         flight={120}
         particles={8}
         spread={60}
@@ -54,8 +60,8 @@ export function AIAssistantButton({ open, onToggle, buttonRef }: AIAssistantButt
         padColor="hsl(var(--color-accent))"
         iconColor="hsl(var(--color-accent-ink))"
         accentColor="hsl(var(--color-accent-2))"
-        wellColor="hsl(var(--color-surface-2))"
-        bandColor="hsl(var(--color-hairline-strong))"
+        wellColor="hsl(var(--color-surface-3))"
+        bandColor="hsl(var(--color-accent) / 0.55)"
       >
         {open ? <CloseIcon /> : <SparkleIcon />}
       </SlingButton>
