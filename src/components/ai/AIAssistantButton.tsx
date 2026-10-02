@@ -33,7 +33,7 @@ export function AIAssistantButton({ open, onToggle, buttonRef }: AIAssistantButt
     // Positioning lives on the wrapper, not the sling root: the root sets
     // `position: relative` for its absolute children, and two competing
     // position utilities would resolve by stylesheet order, not class order.
-    <div className="fixed bottom-5 right-5 z-40">
+    <div className="fixed bottom-8 right-5 z-40">
       <SlingButton
         ariaLabel={open ? 'Close the Cyber_Path AI Assistant' : 'Open the Cyber_Path AI Assistant'}
         ariaExpanded={open}
@@ -63,19 +63,26 @@ export function AIAssistantButton({ open, onToggle, buttonRef }: AIAssistantButt
   );
 }
 
-/** The resting icon: an AI sparkle. Reads as "assistant", not "send". */
+/**
+ * The resting icon: an AI sparkle.
+ *
+ * Geometry matters here. The first version centred each sparkle in the 24×24
+ * box independently, which pushed the union off-centre (up and right) and made
+ * the two shapes collide. These coordinates centre the *pair* optically inside
+ * the pad and keep a clear gap between them.
+ */
 function SparkleIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      width={24}
-      height={24}
+      width={26}
+      height={26}
       fill="currentColor"
       aria-hidden="true"
       focusable="false"
     >
-      <path d="M12 3C12.9 8.1 13.9 9.1 19 10C13.9 10.9 12.9 11.9 12 17C11.1 11.9 10.1 10.9 5 10C10.1 9.1 11.1 8.1 12 3Z" />
-      <path d="M18 2.2C18.5 4.3 19.2 5 21.3 5.5C19.2 6 18.5 6.7 18 8.8C17.5 6.7 16.8 6 14.7 5.5C16.8 5 17.5 4.3 18 2.2Z" />
+      <path d="M9.6 5.2C10.7 10.2 11.5 11 16.5 11.8 11.5 12.6 10.7 13.4 9.6 18.4 8.5 13.4 7.7 12.6 2.7 11.8 7.7 11 8.5 10.2 9.6 5.2Z" />
+      <path d="M18.4 2.4C19 4.8 19.4 5.2 21.8 5.8 19.4 6.4 19 6.8 18.4 9.2 17.8 6.8 17.4 6.4 15 5.8 17.4 5.2 17.8 4.8 18.4 2.4Z" />
     </svg>
   );
 }
@@ -85,11 +92,11 @@ function CloseIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      width={22}
-      height={22}
+      width={24}
+      height={24}
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={2.4}
       strokeLinecap="round"
       aria-hidden="true"
       focusable="false"

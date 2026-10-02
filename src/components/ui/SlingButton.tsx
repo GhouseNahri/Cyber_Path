@@ -96,6 +96,7 @@ const HAND_MAX = 6000;
 const CANCEL = 0.5;
 const POWER_CAP = 1.5;
 const DOT_MS = 300;
+const CLICK_SUPPRESS_MS = 400;
 const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -177,7 +178,14 @@ const SlingButton: React.FC<SlingButtonProps> = ({
   const dotPending = useRef(false);
   const dotTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const paintQueued = useRef(false);
-  const skipClick = useRef(false);
+  /**
+   * Suppresses the synthetic `click` that follows a pointer release, so one
+   * gesture cannot fire `onSend` twice. A deadline rather than a boolean:
+   * `pointercancel` (interrupted touch) and the Escape-during-drag path both
+   * bail out without a click ever arriving, and a sticky boolean would swallow
+   * the next genuine keyboard activation.
+   */
+  const suppressClickUntil = useRef(0);
   const hintId = useId();
 
   const px = useMotionValue(0);
@@ -380,7 +388,7 @@ const SlingButton: React.FC<SlingButtonProps> = ({
     const g = grip.current;
     if (!g || g.id !== pointerId) return;
     grip.current = null;
-    skipClick.current = true;
+    suppressClickUntil.current = performance.now() + CLICK_SUPPRESS_MS;
     try {
       padRef.current?.releasePointerCapture(pointerId);
     } catch {}
@@ -461,7 +469,13 @@ const SlingButton: React.FC<SlingButtonProps> = ({
           '--sl-well': wellColor,
           '--sl-band': bandColor,
           '--sl-stroke': `${strokeWidth}px`,
-          '--sl-dot': `${DOT}px`
+          '--sl-dot': `${DOT}px`,
+          // The well overflows the square root, so elevation has to be a
+          // drop-shadow filter — a box-shadow would trace the 56px square and
+          // leave the ring flat.
+          filter:
+            'drop-shadow(0 2px 5px hsl(var(--shadow-color) / 0.5)) ' +
+            'drop-shadow(0 14px 28px hsl(var(--shadow-color) / 0.45))'
         } as CSSProperties
       }
     >
@@ -524,10 +538,7 @@ const SlingButton: React.FC<SlingButtonProps> = ({
             if (e.key === 'Escape' && grip.current) release(grip.current.id, true);
           }}
           onClick={() => {
-            if (skipClick.current) {
-              skipClick.current = false;
-              return;
-            }
+            if (performance.now() < suppressClickUntil.current) return;
             if (!disabled) onSend?.();
           }}
         >
@@ -539,7 +550,7 @@ const SlingButton: React.FC<SlingButtonProps> = ({
         </button>
       </motion.span>
       <span id={hintId} className="sr-only">
-        Press Enter to send, or drag away and release.
+        Press Enter to activate, or drag away and release.
       </span>
     </span>
   );
